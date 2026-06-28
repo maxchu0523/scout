@@ -64,9 +64,14 @@ export interface ServerResult {
 /** The single canonical object the engine resolves to and `--json` prints. */
 export interface ScanResult {
   scannedAt: string;
-  host: string;
+  /** The original --host spec (single IP, CIDR, range, or "auto"). */
+  target: string;
   scanned: {
+    /** Number of hosts scanned (1 for a single host, N for a LAN range). */
+    hosts: number;
+    /** Distinct ports probed per host. */
     ports: number;
+    /** Total open (host, port) pairs found. */
     openPorts: number;
     candidates: number;
   };
@@ -91,7 +96,10 @@ export interface Candidate {
 
 /** Options that control what the engine scans (NOT how it renders). */
 export interface ScanOptions {
-  host: string;
+  /** Resolved concrete hosts to scan (already expanded from the spec). */
+  hosts: string[];
+  /** The original spec, kept for display/output (e.g. "192.168.1.0/24"). */
+  target: string;
   ports: number[];
   paths: string[];
   includeConfig: boolean;
@@ -106,7 +114,7 @@ export interface ScanOptions {
 /** Events streamed from the engine so renderers can show live progress. */
 export type ScanEvent =
   | { type: "phase"; phase: "ports" | "probe"; message: string }
-  | { type: "port-open"; port: number; openCount: number }
+  | { type: "port-open"; host: string; port: number; openCount: number }
   | { type: "candidate"; candidate: Candidate; total: number }
   | { type: "verified"; server: ServerResult }
   | { type: "done"; result: ScanResult };

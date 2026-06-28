@@ -37,12 +37,26 @@ MCP has multiple transports, and they're discovered differently:
 | **Streamable HTTP** / legacy HTTP+SSE | yes | **port scan** + endpoint probe + handshake |
 | **stdio** (local subprocess) | no | read client **configs** for the command, then spawn + handshake |
 
-So the localhost port sweep is the hero feature for HTTP servers; stdio servers
-are found via config files (Claude Desktop, Claude Code, Cursor, VS Code, …) and
-verified by spawning them.
+So the port sweep is the hero feature for HTTP servers; stdio servers are found
+via config files (Claude Desktop, Claude Code, Cursor, VS Code, …) and verified
+by spawning them.
 
-> LAN / subnet scanning (`--host 192.168.1.0/24`) is planned for a later version;
-> the `--host` flag is the seam where it will plug in.
+### LAN scanning
+
+`--host` accepts more than a single address — Scout can sweep an entire subnet
+for HTTP/SSE MCP servers:
+
+```bash
+scout scan --host 192.168.1.0/24       # a CIDR block
+scout scan --host 192.168.1.10-50      # a range (last-octet shorthand)
+scout scan --host 10.0.0.1-10.0.0.20   # an explicit range
+scout scan --host auto                  # this machine's local subnet(s)
+```
+
+Every (host, port) pair is swept in one saturated concurrency pool, then each
+open endpoint gets the real MCP handshake. Ranges are capped (65 536 hosts) and
+Scout prints a heads-up before scanning more than 256 hosts. stdio discovery is
+inherently local, so it applies only when localhost is in range.
 
 ## Install
 
@@ -58,6 +72,7 @@ npm link        # optional: makes `scout` available globally
 scout                       # scan localhost (human UI)
 scout scan --json           # raw JSON for agents (auto-on when piped)
 scout scan --ports 1-10000  # widen the port range
+scout scan --host 192.168.1.0/24        # scan a whole subnet (LAN)
 scout scan --tools          # expand and list every tool name
 scout probe http://127.0.0.1:3001/mcp   # verify one explicit URL
 ```
@@ -67,7 +82,7 @@ scout probe http://127.0.0.1:3001/mcp   # verify one explicit URL
 | Flag | Default | Purpose |
 |---|---|---|
 | `--json` | auto when piped | Raw JSON to stdout (the agent contract) |
-| `--host <ip>` | `127.0.0.1` | Host to scan (LAN/CIDR is future work) |
+| `--host <spec>` | `127.0.0.1` | IP, hostname, CIDR, range, or `auto` (LAN) |
 | `--ports <spec>` | curated common set | `3000,8080` or `1-1024` |
 | `--full` | off | Scan all ports `1-65535` (slow) |
 | `--paths <list>` | `/mcp,/sse,/message,/` | Endpoint paths to probe |
@@ -100,8 +115,8 @@ Presentation flags (`--tools`, `--status`, `--sort`) only affect the human UI;
 ```json
 {
   "scannedAt": "2026-06-28T00:00:00Z",
-  "host": "127.0.0.1",
-  "scanned": { "ports": 28, "openPorts": 4, "candidates": 16 },
+  "target": "127.0.0.1",
+  "scanned": { "hosts": 1, "ports": 28, "openPorts": 4, "candidates": 16 },
   "servers": [
     {
       "url": "http://127.0.0.1:3001/mcp",
