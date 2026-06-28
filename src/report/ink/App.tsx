@@ -2,11 +2,14 @@ import { Box, Text, useApp } from "ink";
 import { useEffect, useState } from "react";
 import { runScan } from "../../scan.js";
 import type {
+  AiServiceResult,
   ScanOptions,
   ScanResult,
   ServerResult,
+  Service,
   Status,
 } from "../../types.js";
+import { AiHeaderRow, AiRow } from "./AiRow.js";
 import { Scouting } from "./Scouting.js";
 import { HeaderRow, ServerRow } from "./ServerRow.js";
 
@@ -17,17 +20,12 @@ export interface DisplayOptions {
   ascii: boolean;
 }
 
-function applyDisplay(
-  servers: ServerResult[],
-  d: DisplayOptions,
-): ServerResult[] {
-  const filtered = servers.filter((s) => d.statusFilter.includes(s.status));
-  const sorted = [...filtered].sort((a, b) => {
+function sortServices<T extends Service>(items: T[], d: DisplayOptions): T[] {
+  const filtered = items.filter((s) => d.statusFilter.includes(s.status));
+  return [...filtered].sort((a, b) => {
     if (d.sort === "latency") return a.latencyMs - b.latencyMs;
-    if (d.sort === "tools") return b.tools.length - a.tools.length;
     return a.name.localeCompare(b.name);
   });
-  return sorted;
 }
 
 export function App({
@@ -41,7 +39,7 @@ export function App({
 }) {
   const { exit } = useApp();
   const [caption, setCaption] = useState("starting…");
-  const [live, setLive] = useState<ServerResult[]>([]);
+  const [live, setLive] = useState<Service[]>([]);
   const [result, setResult] = useState<ScanResult | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scan runs once on mount; opts/display/onDone are fixed for the app's lifetime.
@@ -60,7 +58,7 @@ export function App({
           setCaption(`${e.total} candidates`);
           break;
         case "verified":
-          setLive((prev) => [...prev, e.server]);
+          setLive((prev) => [...prev, e.service]);
           break;
         case "done":
           setResult(e.result);
@@ -84,7 +82,15 @@ export function App({
   }, []);
 
   const done = result !== null;
-  const servers = applyDisplay(result ? result.servers : live, display);
+  const all = result ? result.services : live;
+  const mcp = sortServices(
+    all.filter((s): s is ServerResult => s.kind === "mcp"),
+    display,
+  );
+  const ai = sortServices(
+    all.filter((s): s is AiServiceResult => s.kind === "llm-api"),
+    display,
+  );
 
   return (
     <Box flexDirection="column" paddingY={1}>
@@ -94,7 +100,7 @@ export function App({
         </Text>
         <Text color="gray">
           {" "}
-          · live MCP scanner · target {opts.target}
+          · live service scanner · target {opts.target}
           {opts.hosts.length > 1 ? ` (${opts.hosts.length} hosts)` : ""}
         </Text>
       </Box>
@@ -105,31 +111,42 @@ export function App({
         </Box>
       )}
 
-      <Box marginTop={1} flexDirection="column">
-        {servers.length > 0 ? (
-          <>
-            <HeaderRow />
-            {servers.map((s) => (
-              <ServerRow
-                key={`${s.transport}:${s.url}`}
-                server={s}
-                showTools={display.showTools}
-              />
-            ))}
-          </>
-        ) : (
-          done && <Text color="gray">No connectable MCP servers found.</Text>
-        )}
-      </Box>
+      {mcp.length > 0 && (
+        <Box marginTop={1} flexDirection="column">
+          <Text bold>MCP servers</Text>
+          <HeaderRow />
+          {mcp.map((s) => (
+            <ServerRow
+              key={`${s.transport}:${s.url}`}
+              server={s}
+              showTools={display.showTools}
+            />
+          ))}
+        </Box>
+      )}
+
+      {ai.length > 0 && (
+        <Box marginTop={1} flexDirection="column">
+          <Text bold>AI services</Text>
+          <AiHeaderRow />
+          {ai.map((s) => (
+            <AiRow key={s.url} service={s} showModels={display.showTools} />
+          ))}
+        </Box>
+      )}
+
+      {done && mcp.length === 0 && ai.length === 0 && (
+        <Box marginTop={1}>
+          <Text color="gray">No connectable services found.</Text>
+        </Box>
+      )}
 
       {done && result && (
         <Box marginTop={1}>
           <Text color="gray">
-            {result.servers.length} server
-            {result.servers.length === 1 ? "" : "s"} ·{" "}
-            {result.scanned.openPorts} open across {result.scanned.hosts} host
-            {result.scanned.hosts === 1 ? "" : "s"} ·{" "}
-            {result.scanned.candidates} candidates probed
+            {mcp.length} MCP · {ai.length} AI · {result.scanned.openPorts} open
+            across {result.scanned.hosts} host
+            {result.scanned.hosts === 1 ? "" : "s"}
           </Text>
         </Box>
       )}

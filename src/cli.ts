@@ -12,13 +12,13 @@ import type {
 } from "./types.js";
 import { DEFAULT_PORTS, parsePorts } from "./util/pool.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const program = new Command();
 program
   .name("scout")
   .description(
-    "Live MCP scanner — discovers and verifies connectable MCP servers.",
+    "Live scanner for connectable MCP servers and local AI API services.",
   )
   .version(VERSION);
 
@@ -32,6 +32,7 @@ interface CliScanOpts {
   full?: boolean;
   paths: string;
   config?: boolean; // --no-config => false
+  ai?: boolean; // --no-ai => false
   configFile?: string[];
   connectTimeout: string;
   timeout: string;
@@ -75,6 +76,7 @@ function buildScanOptions(o: CliScanOpts): ScanOptions {
       .map((p) => p.trim())
       .filter(Boolean),
     includeConfig: o.config !== false,
+    includeAi: o.ai !== false,
     extraConfigPaths: o.configFile ?? [],
     connectTimeoutMs: Number(o.connectTimeout),
     timeoutMs: Number(o.timeout),
@@ -105,7 +107,7 @@ function isAscii(o: CliScanOpts): boolean {
 
 program
   .command("scan", { isDefault: true })
-  .description("Scan for connectable MCP servers")
+  .description("Scan for connectable MCP servers and local AI API services")
   // Output
   .option("--json", "emit raw JSON (auto-on when stdout is not a TTY)")
   .option("-q, --quiet", "suppress live progress")
@@ -121,6 +123,10 @@ program
   .option("--full", "scan all ports 1-65535 (slow)")
   .option("--paths <list>", "endpoint paths to probe", "/mcp,/sse,/message,/")
   .option("--no-config", "do not read client config files for candidates")
+  .option(
+    "--no-ai",
+    "do not fingerprint local AI API services (LM Studio, Ollama…)",
+  )
   .option("--config-file <path...>", "extra config file(s) to read")
   // Probe behavior
   .option("--connect-timeout <ms>", "TCP connect timeout", "300")
@@ -166,7 +172,7 @@ program
       });
     }
 
-    if (o.failIfNone && result.servers.length === 0) process.exit(1);
+    if (o.failIfNone && result.services.length === 0) process.exit(1);
   });
 
 program

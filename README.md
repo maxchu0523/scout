@@ -1,19 +1,30 @@
 # scout
 
-**A live MCP scanner — `nmap` for [Model Context Protocol](https://modelcontextprotocol.io) servers.**
+**A live scanner for local services you can connect to — `nmap` for
+[MCP](https://modelcontextprotocol.io) servers *and* local AI APIs.**
 
-Scout doesn't just read config files to see what's *declared* — it actively
-scans for listening servers, performs the real MCP `initialize` handshake against
-each candidate, and reports only what genuinely **answers and is connectable**,
-along with the tools/resources/prompts it actually exposes.
+Scout doesn't just read config files to see what's *declared* — it actively scans
+for listening services, verifies each one (the real MCP `initialize` handshake, or
+an AI API's model list), and reports only what genuinely **answers and is
+connectable**, with the tools or models it actually exposes.
 
 Built for both humans (a live terminal UI) and agents (stable `--json`), so an
-agent can scan at runtime and dynamically decide which MCP servers to use.
+agent can scan at runtime and dynamically decide what to use.
 
 ```
+MCP servers
 ✓ mcp-servers/everything http   http://127.0.0.1:3001/mcp      13    21ms
-🔒 some-gated-server       http   http://127.0.0.1:9000/mcp      —     —     (auth required)
+
+AI services
+✓ OpenAI-compatible API  openai http://127.0.0.1:1234          3     25ms
+✓ Ollama                 ollama http://127.0.0.1:11434         7     10ms
 ```
+
+Two kinds of service are detected, each tagged with `kind`:
+- **`mcp`** — MCP servers (HTTP/SSE via port scan, stdio via config).
+- **`llm-api`** — local AI inference APIs: **OpenAI-compatible** (LM Studio, vLLM,
+  LocalAI, llama.cpp, Jan…) via `GET /v1/models`, and **Ollama** via `GET /api/tags`.
+  Disable with `--no-ai`.
 
 ## Why
 
@@ -80,14 +91,13 @@ scout serve                 # run Scout itself as an MCP server (stdio)
 
 ### Use Scout as an MCP server (discovery for agents)
 
-`scout serve` runs Scout *as an MCP server*, so an agent can discover other MCP
-servers through the protocol it already speaks — no shell-out, no config parsing.
-It exposes two tools:
+`scout serve` runs Scout *as an MCP server*, so an agent can discover other
+services through the protocol it already speaks — no shell-out. It exposes:
 
-- **`list_available_mcps`** — scan for connectable servers (args: `host`, `ports`,
-  `includeConfig`, `timeoutMs`); returns the canonical result with each server's
-  transport, status, and tools.
-- **`probe_mcp`** — verify one explicit `url`.
+- **`list_available_mcps`** — connectable MCP servers (args: `host`, `ports`,
+  `includeConfig`, `timeoutMs`).
+- **`list_ai_services`** — local AI APIs (LM Studio, Ollama, …) and their models.
+- **`probe_mcp`** — verify one explicit URL.
 
 Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
 
@@ -99,9 +109,6 @@ Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
 }
 ```
 
-Then the agent can call `list_available_mcps` at runtime to find — and connect
-to — whatever MCP servers are actually live.
-
 ### Key options
 
 | Flag | Default | Purpose |
@@ -112,6 +119,7 @@ to — whatever MCP servers are actually live.
 | `--full` | off | Scan all ports `1-65535` (slow) |
 | `--paths <list>` | `/mcp,/sse,/message,/` | Endpoint paths to probe |
 | `--no-config` | configs on | Skip auto-reading client config files |
+| `--no-ai` | AI on | Skip fingerprinting local AI API services |
 | `--config-file <p...>` | — | Read extra config file(s) (always honored) |
 | `--timeout <ms>` | `3000` | MCP handshake timeout |
 | `--connect-timeout <ms>` | `300` | TCP connect timeout |
@@ -129,21 +137,24 @@ consume it:
 
 - **Agent path** (`--json` / non-TTY): prints the canonical object verbatim. The
   React/Ink UI is **lazy-imported**, so this path never loads it.
-- **Human path** (TTY): a React **Ink** UI with a live "Scouting" animation and a
-  results table that streams in as servers are verified.
+- **Human path** (TTY): a React **Ink** UI with a live "Scouting" animation and
+  results tables (MCP servers + AI services) that stream in as each is verified.
 
 Presentation flags (`--tools`, `--status`, `--sort`) only affect the human UI;
 `--json` is always the full canonical object.
 
 ### JSON shape
 
+Every entry in `services` is discriminated by `kind` (`mcp` | `llm-api`):
+
 ```json
 {
   "scannedAt": "2026-06-28T00:00:00Z",
   "target": "127.0.0.1",
   "scanned": { "hosts": 1, "ports": 28, "openPorts": 4, "candidates": 16 },
-  "servers": [
+  "services": [
     {
+      "kind": "mcp",
       "url": "http://127.0.0.1:3001/mcp",
       "transport": "streamable-http",
       "status": "available",
@@ -156,6 +167,16 @@ Presentation flags (`--tools`, `--status`, `--sort`) only affect the human UI;
       "prompts": [],
       "source": "port-scan",
       "name": "mcp-servers/everything"
+    },
+    {
+      "kind": "llm-api",
+      "url": "http://127.0.0.1:1234",
+      "api": "openai-compatible",
+      "status": "available",
+      "latencyMs": 25,
+      "models": ["qwen/qwen3...", "google/gemma-4..."],
+      "source": "port-scan",
+      "name": "OpenAI-compatible API"
     }
   ]
 }
