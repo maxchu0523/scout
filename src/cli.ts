@@ -280,7 +280,9 @@ program
         args,
         Number(o.timeout),
       );
-      if (o.json || !process.stdout.isTTY) {
+      // Invoke commands return a payload: print the text by default, the full
+      // result only with --json (unlike scan/probe where non-TTY implies JSON).
+      if (o.json) {
         process.stdout.write(`${JSON.stringify(result.raw, null, 2)}\n`);
       } else {
         process.stdout.write(`${result.text}\n`);
@@ -306,7 +308,9 @@ program
         model: o.model,
         timeoutMs: Number(o.timeout),
       });
-      if (o.json || !process.stdout.isTTY) {
+      // The assistant text is the payload: print it by default; --json for the
+      // full completion object.
+      if (o.json) {
         process.stdout.write(`${JSON.stringify(result.raw, null, 2)}\n`);
       } else {
         process.stdout.write(`${result.text}\n`);
