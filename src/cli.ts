@@ -1,0 +1,209 @@
+import { Command, Option } from "commander";
+import { probeCandidate } from "./probe/mcpProbe.js";
+import { printJson } from "./report/json.js";
+import { runScan } from "./scan.js";
+import type {
+  ScanEvent,
+  ScanOptions,
+  ScanResult,
+  Status,
+  Transport,
+} from "./types.js";
+import { DEFAULT_PORTS, parsePorts } from "./util/pool.js";
+
+const VERSION = "0.1.0";
+
+const program = new Command();
+program
+  .name("scout")
+  .description(
+    "Live MCP scanner — discovers and verifies connectable MCP servers.",
+  )
+  .version(VERSION);
+
+interface CliScanOpts {
+  json?: boolean;
+  quiet?: boolean;
+  verbose?: boolean;
+  color?: boolean; // --no-color => false
+  host: string;
+  ports?: string;
+  full?: boolean;
+  paths: string;
+  config?: boolean; // --no-config => false
+  configFile?: string[];
+  connectTimeout: string;
+  timeout: string;
+  concurrency?: string;
+  transport: "auto" | "http" | "sse";
+  tools?: boolean;
+  fullCapabilities?: boolean;
+  status: string;
+  sort: "name" | "latency" | "tools";
+  failIfNone?: boolean;
+}
+
+function buildScanOptions(o: CliScanOpts): ScanOptions {
+  let ports: number[];
+  if (o.full) {
+    process.stderr.write(
+      "scout: --full scans all 65535 ports; this can be slow.\n",
+    );
+    ports = Array.from({ length: 65535 }, (_, i) => i + 1);
+  } else if (o.ports) {
+    ports = parsePorts(o.ports);
+  } else {
+    ports = DEFAULT_PORTS;
+  }
+
+  const concurrency = o.concurrency ? Number(o.concurrency) : undefined;
+
+  return {
+    host: o.host,
+    ports,
+    paths: o.paths
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean),
+    includeConfig: o.config !== false,
+    extraConfigPaths: o.configFile ?? [],
+    connectTimeoutMs: Number(o.connectTimeout),
+    timeoutMs: Number(o.timeout),
+    portConcurrency: concurrency ?? 200,
+    probeConcurrency: concurrency
+      ? Math.max(1, Math.floor(concurrency / 10))
+      : 20,
+    transport: o.transport,
+  };
+}
+
+function parseStatusFilter(spec: string): Status[] {
+  const valid: Status[] = ["available", "auth-required"];
+  const picked = spec
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is Status => (valid as string[]).includes(s));
+  return picked.length ? picked : valid;
+}
+
+function wantsJson(o: CliScanOpts): boolean {
+  return Boolean(o.json) || !process.stdout.isTTY;
+}
+
+function isAscii(o: CliScanOpts): boolean {
+  return o.color === false || Boolean(process.env.NO_COLOR);
+}
+
+program
+  .command("scan", { isDefault: true })
+  .description("Scan for connectable MCP servers")
+  // Output
+  .option("--json", "emit raw JSON (auto-on when stdout is not a TTY)")
+  .option("-q, --quiet", "suppress live progress")
+  .option("-v, --verbose", "debug logging to stderr")
+  .option("--no-color", "disable color / unicode animation")
+  // Targeting
+  .option("--host <ip>", "host to scan", "127.0.0.1")
+  .option("--ports <spec>", "ports, e.g. 3000,8080 or 1-1024")
+  .option("--full", "scan all ports 1-65535 (slow)")
+  .option("--paths <list>", "endpoint paths to probe", "/mcp,/sse,/message,/")
+  .option("--no-config", "do not read client config files for candidates")
+  .option("--config-file <path...>", "extra config file(s) to read")
+  // Probe behavior
+  .option("--connect-timeout <ms>", "TCP connect timeout", "300")
+  .option("--timeout <ms>", "MCP handshake timeout", "3000")
+  .option("--concurrency <n>", "max parallel work")
+  .addOption(
+    new Option("--transport <mode>", "force transport")
+      .choices(["auto", "http", "sse"])
+      .default("auto"),
+  )
+  // Display (rendering-only — ignored under --json)
+  .option("--tools", "list every tool name in the TUI")
+  .option("--full-capabilities", "alias of --tools")
+  .option(
+    "--status <list>",
+    "statuses to show (TUI)",
+    "available,auth-required",
+  )
+  .addOption(
+    new Option("--sort <field>", "sort the TUI table")
+      .choices(["name", "latency", "tools"])
+      .default("name"),
+  )
+  .option("--fail-if-none", "exit non-zero if no servers found")
+  .action(async (o: CliScanOpts) => {
+    const opts = buildScanOptions(o);
+    let result: ScanResult;
+
+    if (wantsJson(o)) {
+      const onEvent: ((e: ScanEvent) => void) | undefined = o.verbose
+        ? (e) => process.stderr.write(`[scout] ${e.type}\n`)
+        : undefined;
+      result = await runScan(opts, onEvent);
+      printJson(result);
+    } else {
+      // Lazy import: React/Ink are NOT loaded on the agent/--json path.
+      const { renderTui } = await import("./report/ink/index.js");
+      result = await renderTui(opts, {
+        showTools: Boolean(o.tools || o.fullCapabilities),
+        statusFilter: parseStatusFilter(o.status),
+        sort: o.sort,
+        ascii: isAscii(o),
+      });
+    }
+
+    if (o.failIfNone && result.servers.length === 0) process.exit(1);
+  });
+
+program
+  .command("probe <url>")
+  .description("Probe a single explicit URL (skips discovery)")
+  .option("--json", "emit raw JSON")
+  .addOption(
+    new Option("--transport <mode>", "force transport")
+      .choices(["auto", "http", "sse"])
+      .default("auto"),
+  )
+  .option("--timeout <ms>", "MCP handshake timeout", "5000")
+  .action(
+    async (
+      url: string,
+      o: {
+        json?: boolean;
+        transport: "auto" | "http" | "sse";
+        timeout: string;
+      },
+    ) => {
+      const hint: Transport =
+        o.transport === "sse" || url.endsWith("/sse")
+          ? "sse"
+          : "streamable-http";
+      const server = await probeCandidate(
+        { url, transport: hint, source: "port-scan" },
+        { timeoutMs: Number(o.timeout), transport: o.transport },
+      );
+
+      if (o.json || !process.stdout.isTTY) {
+        process.stdout.write(`${JSON.stringify(server, null, 2)}\n`);
+      } else if (!server) {
+        process.stderr.write(`✗ ${url} — not a reachable MCP server\n`);
+      } else {
+        const tag =
+          server.status === "available"
+            ? `✓ ${server.name} (${server.tools.length} tools, ${server.latencyMs}ms)`
+            : `🔒 ${server.name} — auth required`;
+        process.stdout.write(`${tag}\n`);
+        if (server.status === "available") {
+          for (const t of server.tools) process.stdout.write(`  • ${t.name}\n`);
+        }
+      }
+
+      if (!server) process.exit(1);
+    },
+  );
+
+program.parseAsync().catch((err) => {
+  process.stderr.write(`scout: ${(err as Error).message}\n`);
+  process.exit(2);
+});

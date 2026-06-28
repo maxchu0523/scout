@@ -1,0 +1,13 @@
+#!/bin/sh
+# Scout pre-commit gate.
+# Lints the files staged for this commit, then runs the unit tests.
+# Activated via the package.json "prepare" script (sets core.hooksPath=githooks).
+set -e
+
+echo "scout pre-commit ▸ linting staged files…"
+npx biome check --staged --no-errors-on-unmatched
+
+echo "scout pre-commit ▸ running tests…"
+npm test --silent
+
+echo "scout pre-commit ▸ ok"
