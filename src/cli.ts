@@ -170,6 +170,17 @@ program
   });
 
 program
+  .command("serve")
+  .description(
+    "Run Scout as an MCP server (stdio), exposing discovery as MCP tools",
+  )
+  .action(async () => {
+    // Lazy import: the server SDK + zod load only when actually serving.
+    const { serveMcp } = await import("./server/serve.js");
+    await serveMcp();
+  });
+
+program
   .command("probe <url>")
   .description("Probe a single explicit URL (skips discovery)")
   .option("--json", "emit raw JSON")
