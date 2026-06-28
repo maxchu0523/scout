@@ -1,4 +1,5 @@
 import { Command, Option } from "commander";
+import { expandHosts } from "./discovery/hosts.js";
 import { probeCandidate } from "./probe/mcpProbe.js";
 import { printJson } from "./report/json.js";
 import { runScan } from "./scan.js";
@@ -58,8 +59,16 @@ function buildScanOptions(o: CliScanOpts): ScanOptions {
 
   const concurrency = o.concurrency ? Number(o.concurrency) : undefined;
 
+  const hosts = expandHosts(o.host);
+  if (hosts.length > 256) {
+    process.stderr.write(
+      `scout: scanning ${hosts.length} hosts × ${ports.length} ports — this may take a while.\n`,
+    );
+  }
+
   return {
-    host: o.host,
+    hosts,
+    target: o.host,
     ports,
     paths: o.paths
       .split(",")
@@ -103,7 +112,11 @@ program
   .option("-v, --verbose", "debug logging to stderr")
   .option("--no-color", "disable color / unicode animation")
   // Targeting
-  .option("--host <ip>", "host to scan", "127.0.0.1")
+  .option(
+    "--host <spec>",
+    "host(s): IP, hostname, CIDR (192.168.1.0/24), range (.10-20), or auto",
+    "127.0.0.1",
+  )
   .option("--ports <spec>", "ports, e.g. 3000,8080 or 1-1024")
   .option("--full", "scan all ports 1-65535 (slow)")
   .option("--paths <list>", "endpoint paths to probe", "/mcp,/sse,/message,/")

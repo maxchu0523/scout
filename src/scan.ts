@@ -1,6 +1,6 @@
 import { discoverFromConfig } from "./discovery/config.js";
 import { buildEndpointCandidates } from "./discovery/endpoints.js";
-import { scanPorts } from "./discovery/portScan.js";
+import { type HostPort, scanHostPorts } from "./discovery/portScan.js";
 import { probeCandidate } from "./probe/mcpProbe.js";
 import type {
   Candidate,
@@ -36,26 +36,36 @@ export async function runScan(
   opts: ScanOptions,
   onEvent: (e: ScanEvent) => void = () => {},
 ): Promise<ScanResult> {
-  // 1. Port sweep -----------------------------------------------------------
+  // 1. Port sweep across every (host, port) pair ----------------------------
+  const hostLabel =
+    opts.hosts.length === 1 ? opts.target : `${opts.hosts.length} hosts`;
   onEvent({
     type: "phase",
     phase: "ports",
-    message: `Sweeping ${opts.ports.length} ports on ${opts.host}`,
+    message: `Sweeping ${opts.ports.length} ports on ${hostLabel}`,
   });
-  const openPorts = await scanPorts(
-    opts.host,
-    opts.ports,
+  const pairs: HostPort[] = opts.hosts.flatMap((host) =>
+    opts.ports.map((port) => ({ host, port })),
+  );
+  const openPairs = await scanHostPorts(
+    pairs,
     opts.connectTimeoutMs,
     opts.portConcurrency,
-    (port, openCount) => onEvent({ type: "port-open", port, openCount }),
+    (hp, openCount) =>
+      onEvent({ type: "port-open", host: hp.host, port: hp.port, openCount }),
   );
 
   // 2. Build candidates (port-scan endpoints + config-declared servers) ------
-  const candidates: Candidate[] = buildEndpointCandidates(
-    opts.host,
-    openPorts,
-    opts.paths,
-  );
+  const openByHost = new Map<string, number[]>();
+  for (const { host, port } of openPairs) {
+    const list = openByHost.get(host) ?? [];
+    list.push(port);
+    openByHost.set(host, list);
+  }
+  const candidates: Candidate[] = [];
+  for (const [host, ports] of openByHost) {
+    candidates.push(...buildEndpointCandidates(host, ports, opts.paths));
+  }
   // Explicit --config-file paths are always read; --no-config only suppresses
   // the auto-discovered known locations.
   if (opts.includeConfig || opts.extraConfigPaths.length > 0) {
@@ -93,10 +103,11 @@ export async function runScan(
   );
   const result: ScanResult = {
     scannedAt: new Date().toISOString(),
-    host: opts.host,
+    target: opts.target,
     scanned: {
+      hosts: opts.hosts.length,
       ports: opts.ports.length,
-      openPorts: openPorts.length,
+      openPorts: openPairs.length,
       candidates: candidates.length,
     },
     servers,

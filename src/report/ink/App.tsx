@@ -54,7 +54,7 @@ export function App({
           setCaption(e.message);
           break;
         case "port-open":
-          setCaption(`:${e.port} open · ${e.openCount} listening`);
+          setCaption(`${e.host}:${e.port} open · ${e.openCount} found`);
           break;
         case "candidate":
           setCaption(`${e.total} candidates`);
@@ -92,7 +92,11 @@ export function App({
         <Text bold color="green">
           scout
         </Text>
-        <Text color="gray"> · live MCP scanner · host {opts.host}</Text>
+        <Text color="gray">
+          {" "}
+          · live MCP scanner · target {opts.target}
+          {opts.hosts.length > 1 ? ` (${opts.hosts.length} hosts)` : ""}
+        </Text>
       </Box>
 
       {!done && (
@@ -123,7 +127,8 @@ export function App({
           <Text color="gray">
             {result.servers.length} server
             {result.servers.length === 1 ? "" : "s"} ·{" "}
-            {result.scanned.openPorts}/{result.scanned.ports} ports open ·{" "}
+            {result.scanned.openPorts} open across {result.scanned.hosts} host
+            {result.scanned.hosts === 1 ? "" : "s"} ·{" "}
             {result.scanned.candidates} candidates probed
           </Text>
         </Box>

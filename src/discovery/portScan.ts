@@ -29,23 +29,28 @@ export function isPortOpen(
   });
 }
 
+export interface HostPort {
+  host: string;
+  port: number;
+}
+
 /**
- * Sweep `ports` on `host`, returning the open ones. Calls `onOpen` as each is
- * found so the UI can stream progress.
+ * Sweep every (host, port) pair, returning the open ones. A single flat pool
+ * across the whole matrix keeps concurrency saturated when scanning a LAN
+ * range (many hosts) rather than draining one host at a time.
  */
-export async function scanPorts(
-  host: string,
-  ports: number[],
+export async function scanHostPorts(
+  pairs: HostPort[],
   timeoutMs: number,
   concurrency: number,
-  onOpen?: (port: number, openCount: number) => void,
-): Promise<number[]> {
-  const open: number[] = [];
-  await mapPool(ports, concurrency, async (port) => {
-    if (await isPortOpen(host, port, timeoutMs)) {
-      open.push(port);
-      onOpen?.(port, open.length);
+  onOpen?: (hp: HostPort, openCount: number) => void,
+): Promise<HostPort[]> {
+  const open: HostPort[] = [];
+  await mapPool(pairs, concurrency, async (hp) => {
+    if (await isPortOpen(hp.host, hp.port, timeoutMs)) {
+      open.push(hp);
+      onOpen?.(hp, open.length);
     }
   });
-  return open.sort((a, b) => a - b);
+  return open;
 }
