@@ -75,7 +75,32 @@ scout scan --ports 1-10000  # widen the port range
 scout scan --host 192.168.1.0/24        # scan a whole subnet (LAN)
 scout scan --tools          # expand and list every tool name
 scout probe http://127.0.0.1:3001/mcp   # verify one explicit URL
+scout serve                 # run Scout itself as an MCP server (stdio)
 ```
+
+### Use Scout as an MCP server (discovery for agents)
+
+`scout serve` runs Scout *as an MCP server*, so an agent can discover other MCP
+servers through the protocol it already speaks — no shell-out, no config parsing.
+It exposes two tools:
+
+- **`list_available_mcps`** — scan for connectable servers (args: `host`, `ports`,
+  `includeConfig`, `timeoutMs`); returns the canonical result with each server's
+  transport, status, and tools.
+- **`probe_mcp`** — verify one explicit `url`.
+
+Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
+
+```json
+{
+  "mcpServers": {
+    "scout": { "command": "scout", "args": ["serve"] }
+  }
+}
+```
+
+Then the agent can call `list_available_mcps` at runtime to find — and connect
+to — whatever MCP servers are actually live.
 
 ### Key options
 
