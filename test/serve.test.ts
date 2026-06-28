@@ -30,7 +30,11 @@ describe("scout serve (MCP server)", { timeout: 30000 }, () => {
 
   it("exposes the discovery tools", async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    assert.deepEqual(names, ["list_available_mcps", "probe_mcp"]);
+    assert.deepEqual(names, [
+      "list_ai_services",
+      "list_available_mcps",
+      "probe_mcp",
+    ]);
   });
 
   it("list_available_mcps returns a valid canonical result", async () => {
@@ -40,8 +44,20 @@ describe("scout serve (MCP server)", { timeout: 30000 }, () => {
     });
     const parsed = JSON.parse(textOf(res));
     assert.equal(parsed.target, "127.0.0.1");
-    assert.ok(Array.isArray(parsed.servers));
+    assert.ok(Array.isArray(parsed.services));
     assert.equal(parsed.scanned.openPorts, 0);
+  });
+
+  it("list_ai_services returns only llm-api services", async () => {
+    const res = await client.callTool({
+      name: "list_ai_services",
+      arguments: { ports: "59999" },
+    });
+    const parsed = JSON.parse(textOf(res));
+    assert.ok(Array.isArray(parsed.services));
+    assert.ok(
+      parsed.services.every((s: { kind: string }) => s.kind === "llm-api"),
+    );
   });
 
   it("probe_mcp returns null for an unreachable URL", async () => {

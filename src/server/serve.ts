@@ -7,7 +7,7 @@ import { runScan } from "../scan.js";
 import type { ScanOptions, Transport } from "../types.js";
 import { DEFAULT_PORTS, parsePorts } from "../util/pool.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const INSTRUCTIONS = `Scout discovers and verifies MCP servers you can connect to right now.
 Call list_available_mcps to scan for connectable servers (localhost by default,
@@ -28,6 +28,7 @@ function scanOptionsFrom(args: {
     ports: args.ports ? parsePorts(args.ports) : DEFAULT_PORTS,
     paths: ["/mcp", "/sse", "/message", "/"],
     includeConfig: args.includeConfig !== false,
+    includeAi: true,
     extraConfigPaths: [],
     connectTimeoutMs: 300,
     timeoutMs: args.timeoutMs ?? 3000,
@@ -88,7 +89,43 @@ export async function serveMcp(): Promise<void> {
           .describe("Per-server handshake timeout in ms. Default 3000"),
       },
     },
-    async (args) => jsonContent(await runScan(scanOptionsFrom(args))),
+    async (args) => {
+      const result = await runScan(scanOptionsFrom(args));
+      const servers = result.services.filter((s) => s.kind === "mcp");
+      return jsonContent({ ...result, services: servers });
+    },
+  );
+
+  server.registerTool(
+    "list_ai_services",
+    {
+      title: "List available local AI API services",
+      description:
+        "Scan for local AI inference APIs (LM Studio, Ollama, vLLM, llama.cpp, " +
+        "…) and return each one's api type, status, and available models.",
+      inputSchema: {
+        host: z
+          .string()
+          .optional()
+          .describe("IP, hostname, CIDR, range, or 'auto'. Default 127.0.0.1"),
+        ports: z
+          .string()
+          .optional()
+          .describe("Port spec, e.g. '1234,11434'. Default: common ports"),
+        timeoutMs: z
+          .number()
+          .optional()
+          .describe("Per-service timeout in ms. Default 3000"),
+      },
+    },
+    async (args) => {
+      const result = await runScan({
+        ...scanOptionsFrom(args),
+        includeConfig: false,
+      });
+      const ai = result.services.filter((s) => s.kind === "llm-api");
+      return jsonContent({ ...result, services: ai });
+    },
   );
 
   server.registerTool(

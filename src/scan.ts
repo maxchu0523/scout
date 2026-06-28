@@ -1,28 +1,29 @@
 import { discoverFromConfig } from "./discovery/config.js";
 import { buildEndpointCandidates } from "./discovery/endpoints.js";
 import { type HostPort, scanHostPorts } from "./discovery/portScan.js";
+import { probeAiService } from "./probe/aiProbe.js";
 import { probeCandidate } from "./probe/mcpProbe.js";
 import type {
   Candidate,
   ScanEvent,
   ScanOptions,
   ScanResult,
-  ServerResult,
+  Service,
 } from "./types.js";
 import { mapPool } from "./util/pool.js";
 
-/** Origin key used to collapse the same server reached via multiple paths. */
-function originKey(r: ServerResult): string {
-  if (r.transport === "stdio") return `stdio:${r.url}`;
+/** Origin key used to collapse the same service reached via multiple paths. */
+function originKey(s: Service): string {
+  if (s.kind === "mcp" && s.transport === "stdio") return `mcp:stdio:${s.url}`;
   try {
-    return `net:${new URL(r.url).host}`;
+    return `${s.kind}:${new URL(s.url).host}`;
   } catch {
-    return `net:${r.url}`;
+    return `${s.kind}:${s.url}`;
   }
 }
 
 /** Prefer an available result over auth-required; otherwise lower latency. */
-function better(a: ServerResult, b: ServerResult): ServerResult {
+function better(a: Service, b: Service): Service {
   if (a.status !== b.status) return a.status === "available" ? a : b;
   return a.latencyMs <= b.latencyMs ? a : b;
 }
@@ -77,28 +78,41 @@ export async function runScan(
     onEvent({ type: "candidate", candidate, total: i + 1 });
   });
 
-  // 3. Probe every candidate; keep only connectable MCP servers --------------
+  // 3. Probe — MCP candidates + (by default) an AI fingerprint per open port -
   onEvent({
     type: "phase",
     phase: "probe",
     message: `Probing ${candidates.length} candidates`,
   });
-  const byOrigin = new Map<string, ServerResult>();
-  await mapPool(candidates, opts.probeConcurrency, async (cand) => {
-    const result = await probeCandidate(cand, {
-      timeoutMs: opts.timeoutMs,
-      transport: opts.transport,
-    });
+  const byOrigin = new Map<string, Service>();
+  const record = (result: Service | null) => {
     if (!result) return;
     const key = originKey(result);
     const existing = byOrigin.get(key);
     const winner = existing ? better(existing, result) : result;
     byOrigin.set(key, winner);
-    if (!existing) onEvent({ type: "verified", server: winner });
-  });
+    if (!existing) onEvent({ type: "verified", service: winner });
+  };
+
+  const mcpWork = mapPool(candidates, opts.probeConcurrency, async (cand) =>
+    record(
+      await probeCandidate(cand, {
+        timeoutMs: opts.timeoutMs,
+        transport: opts.transport,
+      }),
+    ),
+  );
+  const aiWork = opts.includeAi
+    ? mapPool(openPairs, opts.probeConcurrency, async (hp) =>
+        record(
+          await probeAiService(hp.host, hp.port, { timeoutMs: opts.timeoutMs }),
+        ),
+      )
+    : Promise.resolve([]);
+  await Promise.all([mcpWork, aiWork]);
 
   // 4. Assemble canonical result --------------------------------------------
-  const servers = [...byOrigin.values()].sort((a, b) =>
+  const services = [...byOrigin.values()].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
   const result: ScanResult = {
@@ -110,7 +124,7 @@ export async function runScan(
       openPorts: openPairs.length,
       candidates: candidates.length,
     },
-    servers,
+    services,
   };
   onEvent({ type: "done", result });
   return result;

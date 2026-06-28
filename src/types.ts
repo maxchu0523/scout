@@ -42,8 +42,15 @@ export interface ServerCapabilities {
   prompts: boolean;
 }
 
-/** One connectable MCP server in the canonical result. */
+/** What kind of service a discovered entry is. */
+export type ServiceKind = "mcp" | "llm-api";
+
+/** Which local AI API a service speaks. */
+export type AiApi = "openai-compatible" | "ollama";
+
+/** One connectable MCP server (the `mcp` variant of a service). */
 export interface ServerResult {
+  kind: "mcp";
   /** URL for http/sse transports; for stdio this is the spawn command string. */
   url: string;
   transport: Transport;
@@ -61,6 +68,26 @@ export interface ServerResult {
   name: string;
 }
 
+/** One connectable local AI API service (the `llm-api` variant of a service). */
+export interface AiServiceResult {
+  kind: "llm-api";
+  /** Base URL, e.g. http://127.0.0.1:1234 */
+  url: string;
+  api: AiApi;
+  status: Status;
+  latencyMs: number;
+  /** Model ids/names, fully enumerated. */
+  models: string[];
+  /** Server response header, if any. */
+  server?: string;
+  source: Source;
+  /** Human-readable label, e.g. "Ollama" / "OpenAI-compatible API". */
+  name: string;
+}
+
+/** A discovered service — discriminated by `kind`. */
+export type Service = ServerResult | AiServiceResult;
+
 /** The single canonical object the engine resolves to and `--json` prints. */
 export interface ScanResult {
   scannedAt: string;
@@ -75,7 +102,8 @@ export interface ScanResult {
     openPorts: number;
     candidates: number;
   };
-  servers: ServerResult[];
+  /** All connectable services found (MCP servers and AI APIs). */
+  services: Service[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -103,6 +131,8 @@ export interface ScanOptions {
   ports: number[];
   paths: string[];
   includeConfig: boolean;
+  /** Also fingerprint local AI API services on open ports. */
+  includeAi: boolean;
   extraConfigPaths: string[];
   connectTimeoutMs: number;
   timeoutMs: number;
@@ -116,5 +146,5 @@ export type ScanEvent =
   | { type: "phase"; phase: "ports" | "probe"; message: string }
   | { type: "port-open"; host: string; port: number; openCount: number }
   | { type: "candidate"; candidate: Candidate; total: number }
-  | { type: "verified"; server: ServerResult }
+  | { type: "verified"; service: Service }
   | { type: "done"; result: ScanResult };

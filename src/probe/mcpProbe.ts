@@ -192,6 +192,7 @@ export async function probeCandidate(
       await client.close().catch(() => {});
 
       return {
+        kind: "mcp",
         url: cand.url,
         transport: attempt.transport,
         status: "available",
@@ -220,6 +221,7 @@ export async function probeCandidate(
     const authed = await confirmAuthRequired(cand.url, opts.timeoutMs);
     if (authed) {
       return {
+        kind: "mcp",
         url: cand.url,
         transport: cand.transport === "sse" ? "sse" : "streamable-http",
         status: "auth-required",

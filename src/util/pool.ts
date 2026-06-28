@@ -51,6 +51,7 @@ function validPort(p: number): boolean {
 export const DEFAULT_PORTS: number[] = [
   80,
   443,
+  1234, // LM Studio default
   3000,
   3001,
   3333,
