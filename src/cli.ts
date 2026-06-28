@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 import { DEFAULT_PORTS, parsePorts } from "./util/pool.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const program = new Command();
 program
@@ -230,6 +230,87 @@ program
       }
 
       if (!server) process.exit(1);
+    },
+  );
+
+program
+  .command("call <url> <tool>")
+  .description("Invoke a tool on an MCP server and print the result")
+  .option("--args <json>", "tool arguments as a JSON object", "{}")
+  .addOption(
+    new Option("--transport <mode>", "force transport")
+      .choices(["auto", "http", "sse"])
+      .default("auto"),
+  )
+  .option(
+    "--command <cmd>",
+    "treat <url> as a label and spawn this stdio command",
+  )
+  .option("--json", "emit the raw CallToolResult")
+  .option("--timeout <ms>", "connect + call timeout", "20000")
+  .action(
+    async (
+      url: string,
+      tool: string,
+      o: {
+        args: string;
+        transport: "auto" | "http" | "sse";
+        command?: string;
+        json?: boolean;
+        timeout: string;
+      },
+    ) => {
+      let args: Record<string, unknown>;
+      try {
+        args = JSON.parse(o.args);
+      } catch {
+        process.stderr.write(`scout: --args is not valid JSON\n`);
+        process.exit(2);
+      }
+      const { callMcpTool } = await import("./invoke/call.js");
+      const stdio = o.command
+        ? {
+            command: o.command.split(" ")[0],
+            args: o.command.split(" ").slice(1),
+          }
+        : undefined;
+      const result = await callMcpTool(
+        { url, transport: o.transport, stdio },
+        tool,
+        args,
+        Number(o.timeout),
+      );
+      if (o.json || !process.stdout.isTTY) {
+        process.stdout.write(`${JSON.stringify(result.raw, null, 2)}\n`);
+      } else {
+        process.stdout.write(`${result.text}\n`);
+      }
+      if (result.isError) process.exit(1);
+    },
+  );
+
+program
+  .command("chat <url> <prompt>")
+  .description("Send a prompt to a local AI API (LM Studio, Ollama, …)")
+  .option("--model <name>", "model id (default: first available)")
+  .option("--json", "emit the raw chat completion response")
+  .option("--timeout <ms>", "request timeout", "120000")
+  .action(
+    async (
+      url: string,
+      prompt: string,
+      o: { model?: string; json?: boolean; timeout: string },
+    ) => {
+      const { chat } = await import("./invoke/chat.js");
+      const result = await chat(url, prompt, {
+        model: o.model,
+        timeoutMs: Number(o.timeout),
+      });
+      if (o.json || !process.stdout.isTTY) {
+        process.stdout.write(`${JSON.stringify(result.raw, null, 2)}\n`);
+      } else {
+        process.stdout.write(`${result.text}\n`);
+      }
     },
   );
 

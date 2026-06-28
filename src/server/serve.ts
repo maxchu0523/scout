@@ -7,7 +7,7 @@ import { runScan } from "../scan.js";
 import type { ScanOptions, Transport } from "../types.js";
 import { DEFAULT_PORTS, parsePorts } from "../util/pool.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const INSTRUCTIONS = `Scout discovers and verifies MCP servers you can connect to right now.
 Call list_available_mcps to scan for connectable servers (localhost by default,

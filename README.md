@@ -87,7 +87,37 @@ scout scan --host 192.168.1.0/24        # scan a whole subnet (LAN)
 scout scan --tools          # expand and list every tool name
 scout probe http://127.0.0.1:3001/mcp   # verify one explicit URL
 scout serve                 # run Scout itself as an MCP server (stdio)
+
+# …then USE what you found:
+scout call http://127.0.0.1:9000/mcp generate_image \
+  --args '{"prompt":"cyberpunk Hong Kong + Tokyo"}'   # invoke an MCP tool
+scout chat http://127.0.0.1:1234 "summarize this in 3 bullets: ..."  # talk to LM Studio/Ollama
 ```
+
+## Find *and use* a service (for agents)
+
+Scout doesn't just discover — it can invoke, so an agent can go from
+"I don't have that capability" to "I found a local service and used it":
+
+**discover → select → learn → invoke.**
+
+- **Learn** — `scout scan --json` now includes each MCP tool's `inputSchema` (so an
+  agent knows the arguments) and `annotations` (`readOnlyHint`/`destructiveHint`).
+- **Invoke an MCP tool** — `scout call <url> <tool> --args '<json>'`.
+- **Talk to a local model** — `scout chat <url> [--model <id>] "<prompt>"`
+  (OpenAI-compatible; works with LM Studio and Ollama; auto-picks a model).
+
+### The Scout skill
+
+[`skill/scout/SKILL.md`](skill/scout/SKILL.md) teaches an agent the whole loop —
+including a safety rule to **confirm before invoking any non-read-only tool**. It's
+a plain Markdown skill:
+
+- **Claude Code**: copy it to `~/.claude/skills/scout/SKILL.md` (or a project's
+  `.claude/skills/`) and it auto-triggers when a request needs a tool/model the
+  agent lacks.
+- **Any other agent**: paste the body into your system prompt / rules file — the
+  workflow and safety rule aren't Claude-specific.
 
 ### Use Scout as an MCP server (discovery for agents)
 
@@ -162,7 +192,12 @@ Every entry in `services` is discriminated by `kind` (`mcp` | `llm-api`):
       "serverInfo": { "name": "mcp-servers/everything", "version": "2.0.0" },
       "protocolVersion": "2025-11-25",
       "capabilities": { "tools": true, "resources": true, "prompts": true },
-      "tools": [ { "name": "echo", "description": "Echoes back the input string" } ],
+      "tools": [ {
+        "name": "echo",
+        "description": "Echoes back the input string",
+        "inputSchema": { "type": "object", "properties": { "message": { "type": "string" } } },
+        "annotations": { "readOnlyHint": true }
+      } ],
       "resources": [],
       "prompts": [],
       "source": "port-scan",

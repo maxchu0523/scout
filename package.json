@@ -1,6 +1,6 @@
 {
   "name": "scout-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Scout — a live MCP scanner. Discovers and verifies connectable MCP servers, like nmap for MCP.",
   "type": "module",
   "bin": {
