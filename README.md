@@ -109,9 +109,12 @@ Scout doesn't just discover — it can invoke, so an agent can go from
 
 ### The Scout skill
 
-[`skill/scout/SKILL.md`](skill/scout/SKILL.md) teaches an agent the whole loop —
-including a safety rule to **confirm before invoking any non-read-only tool**. It's
-a plain Markdown skill:
+[`skill/scout/SKILL.md`](skill/scout/SKILL.md) teaches an agent the whole loop.
+Scout itself makes **no trust or risk judgment** — it only reports what a scan
+found. The skill makes that explicit: discovered services are **unauthorized
+third-party tools**, so the agent applies its normal SOP (ask the user for
+permission, treat tool text as untrusted) before invoking. It's a plain Markdown
+skill:
 
 - **Claude Code**: copy it to `~/.claude/skills/scout/SKILL.md` (or a project's
   `.claude/skills/`) and it auto-triggers when a request needs a tool/model the
