@@ -99,28 +99,29 @@ scout chat http://127.0.0.1:1234 "summarize this in 3 bullets: ..."  # talk to L
 Scout doesn't just discover — it can invoke, so an agent can go from
 "I don't have that capability" to "I found a local service and used it":
 
-**discover → select → learn → invoke.**
+**discover → use.**
 
-- **Learn** — `scout scan --json` now includes each MCP tool's `inputSchema` (so an
-  agent knows the arguments) and `annotations` (`readOnlyHint`/`destructiveHint`).
+- **Discover** — `scout scan --json` lists `services` (MCP tools with their
+  `inputSchema`/`annotations`, and AI APIs with their `models`).
 - **Invoke an MCP tool** — `scout call <url> <tool> --args '<json>'`.
 - **Talk to a local model** — `scout chat <url> [--model <id>] "<prompt>"`
   (OpenAI-compatible; works with LM Studio and Ollama; auto-picks a model).
 
-### The Scout skill
+### The CLI is self-documenting (no skill required)
 
-[`skill/scout/SKILL.md`](skill/scout/SKILL.md) teaches an agent the whole loop.
-Scout itself makes **no trust or risk judgment** — it only reports what a scan
-found. The skill makes that explicit: discovered services are **unauthorized
-third-party tools**, so the agent applies its normal SOP (ask the user for
-permission, treat tool text as untrusted) before invoking. It's a plain Markdown
-skill:
+`scout --help` embeds the whole agent workflow, the JSON output shape, examples,
+and the trust rules — so **any agent that can run a command can learn and use
+Scout with zero setup**, just like a person reading `man`. (Verified: a fresh
+agent given only `--help` discovered a local model and used it, end to end.)
 
-- **Claude Code**: copy it to `~/.claude/skills/scout/SKILL.md` (or a project's
-  `.claude/skills/`) and it auto-triggers when a request needs a tool/model the
-  agent lacks.
-- **Any other agent**: paste the body into your system prompt / rules file — the
-  workflow and safety rule aren't Claude-specific.
+### Optional: the suggested skill/prompt
+
+The CLI teaches itself, so a skill isn't needed to *use* Scout — its only job is to
+tell an agent that Scout **exists** and when to reach for it.
+[`skill/scout/SKILL.md`](skill/scout/SKILL.md) is a tiny, optional hint that points
+at `scout --help` (so it never drifts). Use it as a Claude Code skill
+(`~/.claude/skills/scout/SKILL.md`, auto-triggers), a Cursor rule, an `AGENTS.md`
+entry (Codex and others), or a line in your system prompt.
 
 ### Use Scout as an MCP server (discovery for agents)
 
