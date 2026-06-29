@@ -26,13 +26,19 @@ async function fetchJson(
   }
 }
 
-/** Pick the first available model id from /v1/models. */
+/**
+ * Pick a usable chat model id from /v1/models. Prefers the first model that
+ * doesn't look like an embedding model (servers like LM Studio list embedding
+ * models alongside chat models, and those can't answer a chat prompt).
+ */
 async function firstModel(base: string, timeoutMs: number): Promise<string> {
   const { body } = await fetchJson(`${base}/v1/models`, {}, timeoutMs);
   const data = (body as { data?: Array<{ id?: string }> } | null)?.data;
-  const id = Array.isArray(data) ? data[0]?.id : undefined;
-  if (!id) throw new Error("no models available; pass --model");
-  return id;
+  const ids = Array.isArray(data)
+    ? data.map((m) => m?.id).filter((x): x is string => typeof x === "string")
+    : [];
+  if (ids.length === 0) throw new Error("no models available; pass --model");
+  return ids.find((id) => !/embed/i.test(id)) ?? ids[0];
 }
 
 export interface ChatResult {

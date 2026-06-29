@@ -15,7 +15,13 @@ before(async () => {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     if (req.url === "/v1/models") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ object: "list", data: [{ id: "test-model" }] }));
+      // Embedding model listed first — auto-pick should skip it.
+      res.end(
+        JSON.stringify({
+          object: "list",
+          data: [{ id: "text-embedding-nomic" }, { id: "test-model" }],
+        }),
+      );
       return;
     }
     if (req.url === "/v1/chat/completions") {
@@ -37,9 +43,9 @@ before(async () => {
 after(() => close());
 
 describe("chat", () => {
-  it("auto-picks the first model and returns the assistant reply", async () => {
+  it("auto-picks the first non-embedding model and returns the reply", async () => {
     const r = await chat(`http://127.0.0.1:${port}`, "hi", { timeoutMs: 3000 });
-    assert.equal(r.model, "test-model");
+    assert.equal(r.model, "test-model"); // skipped text-embedding-nomic
     assert.equal(r.text, "hello there");
   });
 
