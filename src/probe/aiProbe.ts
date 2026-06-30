@@ -1,9 +1,13 @@
 import type { AiServiceResult } from "../types.js";
 
-async function getJson(
-  url: string,
-  timeoutMs: number,
-): Promise<{ status: number; body: unknown; server: string | null } | null> {
+interface Probe {
+  status: number;
+  body: unknown;
+  server: string | null;
+  wwwAuth: string | null;
+}
+
+async function getJson(url: string, timeoutMs: number): Promise<Probe | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -12,14 +16,18 @@ async function getJson(
       headers: { accept: "application/json" },
       signal: ctrl.signal,
     });
-    const server = res.headers.get("server");
     let body: unknown = null;
     try {
       body = await res.json();
     } catch {
       /* non-JSON body — leave null */
     }
-    return { status: res.status, body, server };
+    return {
+      status: res.status,
+      body,
+      server: res.headers.get("server"),
+      wwwAuth: res.headers.get("www-authenticate"),
+    };
   } catch {
     return null;
   } finally {
@@ -27,8 +35,20 @@ async function getJson(
   }
 }
 
-function isAuth(status: number): boolean {
-  return status === 401 || status === 403;
+/**
+ * Only treat a rejection as a genuine AI-auth challenge — not just any 4xx.
+ * Requires HTTP 401 plus either a `WWW-Authenticate` header or an OpenAI-style
+ * `{ error: … }` JSON body. This excludes unrelated services that return a bare
+ * 403 (e.g. macOS AirTunes/AirPlay on ports 5000/7000).
+ */
+function isAiAuth(r: Probe): boolean {
+  if (r.status !== 401) return false;
+  if (r.wwwAuth) return true;
+  return (
+    Boolean(r.body) &&
+    typeof r.body === "object" &&
+    "error" in (r.body as object)
+  );
 }
 
 /**
@@ -51,23 +71,23 @@ export async function probeAiService(
   // 1. Ollama — GET /api/tags → { models: [{ name }] }
   const tags = await getJson(`${base}/api/tags`, opts.timeoutMs);
   if (tags) {
-    if (isAuth(tags.status)) {
-      return ollamaResult(base, "auth-required", [], tags.server, start);
-    }
     const models = ollamaModels(tags.body);
     if (models)
       return ollamaResult(base, "available", models, tags.server, start);
+    if (isAiAuth(tags)) {
+      return ollamaResult(base, "auth-required", [], tags.server, start);
+    }
   }
 
   // 2. OpenAI-compatible — GET /v1/models → { object: "list", data: [{ id }] }
   const v1 = await getJson(`${base}/v1/models`, opts.timeoutMs);
   if (v1) {
-    if (isAuth(v1.status)) {
-      return openaiResult(base, "auth-required", [], v1.server, start);
-    }
     const models = openaiModels(v1.body);
     if (models)
       return openaiResult(base, "available", models, v1.server, start);
+    if (isAiAuth(v1)) {
+      return openaiResult(base, "auth-required", [], v1.server, start);
+    }
   }
 
   return null;

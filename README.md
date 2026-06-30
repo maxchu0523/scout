@@ -87,7 +87,41 @@ scout scan --host 192.168.1.0/24        # scan a whole subnet (LAN)
 scout scan --tools          # expand and list every tool name
 scout probe http://127.0.0.1:3001/mcp   # verify one explicit URL
 scout serve                 # run Scout itself as an MCP server (stdio)
+
+# …then USE what you found:
+scout call http://127.0.0.1:9000/mcp generate_image \
+  --args '{"prompt":"cyberpunk Hong Kong + Tokyo"}'   # invoke an MCP tool
+scout chat http://127.0.0.1:1234 "summarize this in 3 bullets: ..."  # talk to LM Studio/Ollama
 ```
+
+## Find *and use* a service (for agents)
+
+Scout doesn't just discover — it can invoke, so an agent can go from
+"I don't have that capability" to "I found a local service and used it":
+
+**discover → use.**
+
+- **Discover** — `scout scan --json` lists `services` (MCP tools with their
+  `inputSchema`/`annotations`, and AI APIs with their `models`).
+- **Invoke an MCP tool** — `scout call <url> <tool> --args '<json>'`.
+- **Talk to a local model** — `scout chat <url> [--model <id>] "<prompt>"`
+  (OpenAI-compatible; works with LM Studio and Ollama; auto-picks a model).
+
+### The CLI is self-documenting (no skill required)
+
+`scout --help` embeds the whole agent workflow, the JSON output shape, examples,
+and the trust rules — so **any agent that can run a command can learn and use
+Scout with zero setup**, just like a person reading `man`. (Verified: a fresh
+agent given only `--help` discovered a local model and used it, end to end.)
+
+### Optional: the suggested skill/prompt
+
+The CLI teaches itself, so a skill isn't needed to *use* Scout — its only job is to
+tell an agent that Scout **exists** and when to reach for it.
+[`skill/scout/SKILL.md`](skill/scout/SKILL.md) is a tiny, optional hint that points
+at `scout --help` (so it never drifts). Use it as a Claude Code skill
+(`~/.claude/skills/scout/SKILL.md`, auto-triggers), a Cursor rule, an `AGENTS.md`
+entry (Codex and others), or a line in your system prompt.
 
 ### Use Scout as an MCP server (discovery for agents)
 
@@ -162,7 +196,12 @@ Every entry in `services` is discriminated by `kind` (`mcp` | `llm-api`):
       "serverInfo": { "name": "mcp-servers/everything", "version": "2.0.0" },
       "protocolVersion": "2025-11-25",
       "capabilities": { "tools": true, "resources": true, "prompts": true },
-      "tools": [ { "name": "echo", "description": "Echoes back the input string" } ],
+      "tools": [ {
+        "name": "echo",
+        "description": "Echoes back the input string",
+        "inputSchema": { "type": "object", "properties": { "message": { "type": "string" } } },
+        "annotations": { "readOnlyHint": true }
+      } ],
       "resources": [],
       "prompts": [],
       "source": "port-scan",

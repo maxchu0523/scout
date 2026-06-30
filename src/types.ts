@@ -21,9 +21,21 @@ export type Transport = "streamable-http" | "sse" | "stdio";
  */
 export type Status = "available" | "auth-required";
 
+export interface ToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface ToolInfo {
   name: string;
   description?: string;
+  /** JSON Schema for the tool's arguments — lets an agent learn how to call it. */
+  inputSchema?: unknown;
+  /** MCP behavioral hints (readOnlyHint/destructiveHint) for safe selection. */
+  annotations?: ToolAnnotations;
 }
 
 export interface ResourceInfo {

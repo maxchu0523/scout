@@ -68,13 +68,26 @@ describe("probeAiService", () => {
     );
   });
 
-  it("reports auth-required on a 401 from an AI path", async () => {
+  it("reports auth-required on a 401 with an OpenAI-style error body", async () => {
     await withServer(
-      { "/api/tags": { status: 404 }, "/v1/models": { status: 401 } },
+      {
+        "/api/tags": { status: 404 },
+        "/v1/models": { status: 401, body: { error: { message: "no key" } } },
+      },
       async (port) => {
         const r = await probeAiService("127.0.0.1", port, { timeoutMs: 2000 });
         assert.equal(r?.status, "auth-required");
         assert.deepEqual(r?.models, []);
+      },
+    );
+  });
+
+  it("ignores a bare 403 with no AI signal (e.g. AirTunes/AirPlay)", async () => {
+    await withServer(
+      { "/api/tags": { status: 403 }, "/v1/models": { status: 403 } },
+      async (port) => {
+        const r = await probeAiService("127.0.0.1", port, { timeoutMs: 2000 });
+        assert.equal(r, null);
       },
     );
   });

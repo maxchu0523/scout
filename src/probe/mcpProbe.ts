@@ -135,6 +135,8 @@ async function enumerate(client: Client): Promise<{
       tools = r.tools.map((t) => ({
         name: t.name,
         description: t.description,
+        inputSchema: t.inputSchema,
+        annotations: t.annotations,
       }));
     } catch {
       /* advertised but failed to list — leave empty */
@@ -168,6 +170,44 @@ async function enumerate(client: Client): Promise<{
  * Returns a ServerResult for connectable servers (`available` /
  * `auth-required`), or null for anything that isn't a reachable MCP server.
  */
+/**
+ * Connect a `Client` to an MCP target, trying transports per the plan. Shared by
+ * the prober and the `scout call` invoke path. Caller is responsible for
+ * `client.close()`. Throws if no transport connects.
+ */
+export async function connectMcpClient(
+  target: {
+    url: string;
+    transport: "auto" | "http" | "sse";
+    stdio?: { command: string; args?: string[] };
+  },
+  timeoutMs: number,
+): Promise<Client> {
+  const cand: Candidate = target.stdio
+    ? {
+        url: target.url,
+        transport: "stdio",
+        source: "port-scan",
+        stdio: target.stdio,
+      }
+    : { url: target.url, transport: "streamable-http", source: "port-scan" };
+
+  let lastErr: unknown;
+  for (const attempt of transportPlan(cand, target.transport)) {
+    const client = new Client(CLIENT_INFO);
+    try {
+      await withTimeout(client.connect(attempt.make()), timeoutMs, "connect");
+      return client;
+    } catch (e) {
+      lastErr = e;
+      await client.close().catch(() => {});
+    }
+  }
+  throw new Error(
+    `could not connect to ${target.url}: ${String((lastErr as Error)?.message ?? lastErr)}`,
+  );
+}
+
 export async function probeCandidate(
   cand: Candidate,
   opts: { timeoutMs: number; transport: "auto" | "http" | "sse" },
