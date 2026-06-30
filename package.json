@@ -1,8 +1,9 @@
 {
-  "name": "scout-mcp",
+  "name": "scout-ai",
   "version": "0.3.0",
-  "description": "Scout — a live MCP scanner. Discovers and verifies connectable MCP servers, like nmap for MCP.",
+  "description": "Scout — a live scanner for connectable MCP servers and local AI APIs (LM Studio, Ollama). Discovers, verifies, and invokes them; like nmap for MCP.",
   "type": "module",
+  "private": true,
   "bin": {
     "scout": "dist/cli.js"
   },
@@ -22,16 +23,26 @@
     "format": "biome format --write .",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "check": "npm run lint && npm run typecheck && npm test",
-    "prepare": "git config core.hooksPath githooks"
+    "setup-hooks": "git config core.hooksPath githooks",
+    "prepare": "git config core.hooksPath githooks || true",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run check"
   },
   "keywords": [
     "mcp",
     "model-context-protocol",
     "scanner",
     "cli",
-    "discovery"
+    "discovery",
+    "ai",
+    "llm",
+    "lm-studio",
+    "ollama"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "commander": "^12.1.0",
