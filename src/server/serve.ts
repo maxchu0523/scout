@@ -1,13 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import {
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_PATHS,
+  DEFAULT_PORT_CONCURRENCY,
+  DEFAULT_PROBE_CONCURRENCY,
+  DEFAULT_TIMEOUT_MS,
+} from "../defaults.js";
 import { expandHosts } from "../discovery/hosts.js";
 import { probeCandidate } from "../probe/mcpProbe.js";
 import { runScan } from "../scan.js";
 import type { ScanOptions, Transport } from "../types.js";
 import { DEFAULT_PORTS, parsePorts } from "../util/pool.js";
-
-const VERSION = "0.3.0";
+import { VERSION } from "../version.js";
 
 const INSTRUCTIONS = `Scout discovers and verifies MCP servers you can connect to right now.
 Call list_available_mcps to scan for connectable servers (localhost by default,
@@ -26,14 +32,14 @@ function scanOptionsFrom(args: {
     hosts: expandHosts(host),
     target: host,
     ports: args.ports ? parsePorts(args.ports) : DEFAULT_PORTS,
-    paths: ["/mcp", "/sse", "/message", "/"],
+    paths: DEFAULT_PATHS,
     includeConfig: args.includeConfig !== false,
     includeAi: true,
     extraConfigPaths: [],
-    connectTimeoutMs: 300,
-    timeoutMs: args.timeoutMs ?? 3000,
-    portConcurrency: 200,
-    probeConcurrency: 20,
+    connectTimeoutMs: DEFAULT_CONNECT_TIMEOUT_MS,
+    timeoutMs: args.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    portConcurrency: DEFAULT_PORT_CONCURRENCY,
+    probeConcurrency: DEFAULT_PROBE_CONCURRENCY,
     transport: "auto",
   };
 }

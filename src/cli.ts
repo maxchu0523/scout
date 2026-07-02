@@ -1,4 +1,11 @@
 import { Command, Option } from "commander";
+import {
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_PATHS,
+  DEFAULT_PORT_CONCURRENCY,
+  DEFAULT_PROBE_CONCURRENCY,
+  DEFAULT_TIMEOUT_MS,
+} from "./defaults.js";
 import { expandHosts } from "./discovery/hosts.js";
 import { probeCandidate } from "./probe/mcpProbe.js";
 import { printJson } from "./report/json.js";
@@ -11,8 +18,17 @@ import type {
   Transport,
 } from "./types.js";
 import { DEFAULT_PORTS, parsePorts } from "./util/pool.js";
+import { VERSION } from "./version.js";
 
-const VERSION = "0.3.0";
+/** Parse a CLI numeric flag, erroring out (exit 2) on non-positive/garbage. */
+function positiveInt(value: string, flag: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    process.stderr.write(`scout: ${flag} must be a positive number\n`);
+    process.exit(2);
+  }
+  return n;
+}
 
 // Self-teaching help: an agent (or human) can learn the whole tool from `--help`,
 // no skill or docs required. Shown after the top-level help.
@@ -88,7 +104,9 @@ function buildScanOptions(o: CliScanOpts): ScanOptions {
     ports = DEFAULT_PORTS;
   }
 
-  const concurrency = o.concurrency ? Number(o.concurrency) : undefined;
+  const concurrency = o.concurrency
+    ? positiveInt(o.concurrency, "--concurrency")
+    : undefined;
 
   const hosts = expandHosts(o.host);
   if (hosts.length > 256) {
@@ -108,12 +126,12 @@ function buildScanOptions(o: CliScanOpts): ScanOptions {
     includeConfig: o.config !== false,
     includeAi: o.ai !== false,
     extraConfigPaths: o.configFile ?? [],
-    connectTimeoutMs: Number(o.connectTimeout),
-    timeoutMs: Number(o.timeout),
-    portConcurrency: concurrency ?? 200,
+    connectTimeoutMs: positiveInt(o.connectTimeout, "--connect-timeout"),
+    timeoutMs: positiveInt(o.timeout, "--timeout"),
+    portConcurrency: concurrency ?? DEFAULT_PORT_CONCURRENCY,
     probeConcurrency: concurrency
       ? Math.max(1, Math.floor(concurrency / 10))
-      : 20,
+      : DEFAULT_PROBE_CONCURRENCY,
     transport: o.transport,
   };
 }
@@ -169,7 +187,7 @@ Examples:
   )
   .option("--ports <spec>", "ports, e.g. 3000,8080 or 1-1024")
   .option("--full", "scan all ports 1-65535 (slow)")
-  .option("--paths <list>", "endpoint paths to probe", "/mcp,/sse,/message,/")
+  .option("--paths <list>", "endpoint paths to probe", DEFAULT_PATHS.join(","))
   .option("--no-config", "do not read client config files for candidates")
   .option(
     "--no-ai",
@@ -177,8 +195,12 @@ Examples:
   )
   .option("--config-file <path...>", "extra config file(s) to read")
   // Probe behavior
-  .option("--connect-timeout <ms>", "TCP connect timeout", "300")
-  .option("--timeout <ms>", "MCP handshake timeout", "3000")
+  .option(
+    "--connect-timeout <ms>",
+    "TCP connect timeout",
+    String(DEFAULT_CONNECT_TIMEOUT_MS),
+  )
+  .option("--timeout <ms>", "MCP handshake timeout", String(DEFAULT_TIMEOUT_MS))
   .option("--concurrency <n>", "max parallel work")
   .addOption(
     new Option("--transport <mode>", "force transport")
@@ -259,7 +281,10 @@ program
           : "streamable-http";
       const server = await probeCandidate(
         { url, transport: hint, source: "port-scan" },
-        { timeoutMs: Number(o.timeout), transport: o.transport },
+        {
+          timeoutMs: positiveInt(o.timeout, "--timeout"),
+          transport: o.transport,
+        },
       );
 
       if (o.json || !process.stdout.isTTY) {
@@ -337,7 +362,7 @@ Example:
         { url, transport: o.transport, stdio },
         tool,
         args,
-        Number(o.timeout),
+        positiveInt(o.timeout, "--timeout"),
       );
       // Invoke commands return a payload: print the text by default, the full
       // result only with --json (unlike scan/probe where non-TTY implies JSON).
@@ -376,7 +401,7 @@ Example:
       const { chat } = await import("./invoke/chat.js");
       const result = await chat(url, prompt, {
         model: o.model,
-        timeoutMs: Number(o.timeout),
+        timeoutMs: positiveInt(o.timeout, "--timeout"),
       });
       // The assistant text is the payload: print it by default; --json for the
       // full completion object.

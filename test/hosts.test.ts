@@ -44,6 +44,10 @@ describe("expandHosts", () => {
     assert.deepEqual(expandHosts("example.com"), ["example.com"]);
   });
 
+  it("passes through a hostname containing a hyphen", () => {
+    assert.deepEqual(expandHosts("my-macbook.local"), ["my-macbook.local"]);
+  });
+
   it("expands a CIDR", () => {
     assert.equal(expandHosts("192.168.0.0/30").length, 2);
   });

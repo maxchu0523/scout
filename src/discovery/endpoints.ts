@@ -24,7 +24,7 @@ export function buildEndpointCandidates(
       const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
       const url = `${scheme}://${hostForUrl}:${port}${path === "/" ? "" : path}`;
       candidates.push({
-        url: url || `${scheme}://${hostForUrl}:${port}/`,
+        url,
         transport: path.endsWith("/sse") ? "sse" : "streamable-http",
         source: "port-scan",
       });

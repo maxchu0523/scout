@@ -103,15 +103,18 @@ export function expandHosts(spec: string): string[] {
 
   if (s.includes("/")) return expandCidr(s);
 
+  // Only treat a hyphen as an IP range when the left side is an IPv4 address;
+  // otherwise it's a hostname that happens to contain "-" (my-macbook.local).
   if (s.includes("-")) {
     const [start, endRaw] = s.split("-").map((x) => x.trim());
-    if (!isIpv4(start)) throw new Error(`invalid range start: ${start}`);
-    // Shorthand: 192.168.1.10-20 → end is just the final octet.
-    const end = endRaw.includes(".")
-      ? endRaw
-      : `${start.split(".").slice(0, 3).join(".")}.${endRaw}`;
-    if (!isIpv4(end)) throw new Error(`invalid range end: ${endRaw}`);
-    return rangeToHosts(ipToInt(start), ipToInt(end));
+    if (isIpv4(start)) {
+      // Shorthand: 192.168.1.10-20 → end is just the final octet.
+      const end = endRaw.includes(".")
+        ? endRaw
+        : `${start.split(".").slice(0, 3).join(".")}.${endRaw}`;
+      if (!isIpv4(end)) throw new Error(`invalid range end: ${endRaw}`);
+      return rangeToHosts(ipToInt(start), ipToInt(end));
+    }
   }
 
   return [s];

@@ -11,8 +11,9 @@ import type {
   ToolInfo,
   Transport,
 } from "../types.js";
+import { VERSION } from "../version.js";
 
-const CLIENT_INFO = { name: "scout", version: "0.1.0" };
+const CLIENT_INFO = { name: "scout", version: VERSION };
 
 /**
  * Confirm a candidate is a genuine *auth-gated MCP server* rather than some
