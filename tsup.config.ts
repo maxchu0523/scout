@@ -15,6 +15,6 @@ export default defineConfig({
   banner: {
     js: "#!/usr/bin/env node",
   },
-  // Measure real bundle size; written to dist/metafile-*.json
-  metafile: true,
+  // No metafile — it would otherwise be emitted into dist/ and published.
+  metafile: false,
 });
