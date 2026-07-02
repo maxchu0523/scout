@@ -40,6 +40,15 @@
     "ollama"
   ],
   "license": "MIT",
+  "author": "https://github.com/maxchu0523",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxchu0523/scout.git"
+  },
+  "homepage": "https://github.com/maxchu0523/scout#readme",
+  "bugs": {
+    "url": "https://github.com/maxchu0523/scout/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
