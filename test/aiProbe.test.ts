@@ -117,4 +117,43 @@ describe("probeAiService", () => {
     const r = await probeAiService("127.0.0.1", 59999, { timeoutMs: 500 });
     assert.equal(r, null);
   });
+
+  it("uses https on TLS ports (443/8443), http otherwise", async () => {
+    const urls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    // Capture the requested URL; answer 404 so the probe just returns null.
+    globalThis.fetch = ((input: string | URL) => {
+      urls.push(String(input));
+      return Promise.resolve({
+        status: 404,
+        headers: { get: () => null },
+        json: () => Promise.resolve(null),
+      } as unknown as Response);
+    }) as typeof fetch;
+
+    try {
+      await probeAiService("10.0.0.5", 443, { timeoutMs: 500 });
+      await probeAiService("10.0.0.5", 8443, { timeoutMs: 500 });
+      await probeAiService("10.0.0.5", 1234, { timeoutMs: 500 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.ok(
+      urls.includes("https://10.0.0.5:443/api/tags"),
+      "port 443 should be probed over https",
+    );
+    assert.ok(
+      urls.includes("https://10.0.0.5:8443/v1/models"),
+      "port 8443 should be probed over https",
+    );
+    assert.ok(
+      urls.includes("http://10.0.0.5:1234/api/tags"),
+      "non-TLS port should stay http",
+    );
+    assert.ok(
+      !urls.some((u) => u.startsWith("http://10.0.0.5:443")),
+      "port 443 must never be probed over plain http",
+    );
+  });
 });
