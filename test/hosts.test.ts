@@ -44,32 +44,20 @@ describe("expandHosts", () => {
     assert.deepEqual(expandHosts("example.com"), ["example.com"]);
   });
 
+  it("passes through a hostname containing a hyphen", () => {
+    assert.deepEqual(expandHosts("my-macbook.local"), ["my-macbook.local"]);
+  });
+
   it("expands a CIDR", () => {
     assert.equal(expandHosts("192.168.0.0/30").length, 2);
   });
 
-  it("expands an explicit range", () => {
-    assert.deepEqual(expandHosts("10.0.0.1-10.0.0.3"), [
-      "10.0.0.1",
-      "10.0.0.2",
-      "10.0.0.3",
-    ]);
+  it("rejects an explicit IP range with a CIDR hint", () => {
+    assert.throws(() => expandHosts("10.0.0.1-10.0.0.3"), /use CIDR/);
   });
 
-  it("expands a last-octet shorthand range", () => {
-    assert.deepEqual(expandHosts("10.0.0.10-12"), [
-      "10.0.0.10",
-      "10.0.0.11",
-      "10.0.0.12",
-    ]);
-  });
-
-  it("normalizes a reversed range", () => {
-    assert.deepEqual(expandHosts("10.0.0.3-1"), [
-      "10.0.0.1",
-      "10.0.0.2",
-      "10.0.0.3",
-    ]);
+  it("rejects a last-octet shorthand range with a CIDR hint", () => {
+    assert.throws(() => expandHosts("10.0.0.10-12"), /use CIDR/);
   });
 
   it("trims whitespace", () => {

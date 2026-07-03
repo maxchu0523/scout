@@ -1,5 +1,8 @@
 import type { AiServiceResult } from "../types.js";
 
+/** Ports where a local AI API would typically be reached over TLS. */
+const TLS_PORTS = new Set([443, 8443]);
+
 interface Probe {
   status: number;
   body: unknown;
@@ -65,7 +68,8 @@ export async function probeAiService(
   opts: { timeoutMs: number },
 ): Promise<AiServiceResult | null> {
   const hostForUrl = host.includes(":") ? `[${host}]` : host;
-  const base = `http://${hostForUrl}:${port}`;
+  const scheme = TLS_PORTS.has(port) ? "https" : "http";
+  const base = `${scheme}://${hostForUrl}:${port}`;
   const start = Date.now();
 
   // 1. Ollama — GET /api/tags → { models: [{ name }] }
