@@ -84,9 +84,11 @@ export function detectLocalCidrs(): string[] {
  * Resolve a `--host` spec into the concrete hosts to scan. Supports:
  *   - single IPv4 / IPv6 / hostname     → [spec]
  *   - CIDR                              192.168.1.0/24
- *   - explicit range                   192.168.1.10-192.168.1.20
- *   - last-octet shorthand range       192.168.1.10-20
  *   - "auto" / "lan"                   this machine's local subnet(s)
+ *
+ * Multi-host scans use CIDR notation. Hyphen IP ranges are not supported; a
+ * spec that still looks like one is rejected with a hint toward CIDR (so a
+ * hostname that merely contains a hyphen, e.g. my-macbook.local, still works).
  */
 export function expandHosts(spec: string): string[] {
   const s = spec.trim();
@@ -103,18 +105,13 @@ export function expandHosts(spec: string): string[] {
 
   if (s.includes("/")) return expandCidr(s);
 
-  // Only treat a hyphen as an IP range when the left side is an IPv4 address;
-  // otherwise it's a hostname that happens to contain "-" (my-macbook.local).
-  if (s.includes("-")) {
-    const [start, endRaw] = s.split("-").map((x) => x.trim());
-    if (isIpv4(start)) {
-      // Shorthand: 192.168.1.10-20 → end is just the final octet.
-      const end = endRaw.includes(".")
-        ? endRaw
-        : `${start.split(".").slice(0, 3).join(".")}.${endRaw}`;
-      if (!isIpv4(end)) throw new Error(`invalid range end: ${endRaw}`);
-      return rangeToHosts(ipToInt(start), ipToInt(end));
-    }
+  // Reject an old-style IP range (10.0.0.1-10.0.0.20) with a CIDR hint rather
+  // than silently treating it as a doomed hostname lookup. A hyphen whose left
+  // side is NOT an IPv4 address is a normal hostname and passes through.
+  if (s.includes("-") && isIpv4(s.split("-")[0].trim())) {
+    throw new Error(
+      `IP ranges are not supported; use CIDR notation instead (e.g. 192.168.1.0/24). Got: ${s}`,
+    );
   }
 
   return [s];

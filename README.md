@@ -59,13 +59,12 @@ for HTTP/SSE MCP servers:
 
 ```bash
 scout scan --host 192.168.1.0/24       # a CIDR block
-scout scan --host 192.168.1.10-50      # a range (last-octet shorthand)
-scout scan --host 10.0.0.1-10.0.0.20   # an explicit range
 scout scan --host auto                  # this machine's local subnet(s)
 ```
 
-Every (host, port) pair is swept in one saturated concurrency pool, then each
-open endpoint gets the real MCP handshake. Ranges are capped (65 536 hosts) and
+Multi-host scans use CIDR notation (`192.168.1.0/24`) or `auto`. Every
+(host, port) pair is swept in one saturated concurrency pool, then each open
+endpoint gets the real MCP handshake. A CIDR block is capped (65 536 hosts) and
 Scout prints a heads-up before scanning more than 256 hosts. stdio discovery is
 inherently local, so it applies only when localhost is in range.
 
@@ -148,7 +147,7 @@ Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
 | Flag | Default | Purpose |
 |---|---|---|
 | `--json` | auto when piped | Raw JSON to stdout (the agent contract) |
-| `--host <spec>` | `127.0.0.1` | IP, hostname, CIDR, range, or `auto` (LAN) |
+| `--host <spec>` | `127.0.0.1` | IP, hostname, CIDR, or `auto` (LAN) |
 | `--ports <spec>` | curated common set | `3000,8080` or `1-1024` |
 | `--full` | off | Scan all ports `1-65535` (slow) |
 | `--paths <list>` | `/mcp,/sse,/message,/` | Endpoint paths to probe |

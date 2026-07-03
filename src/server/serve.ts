@@ -17,7 +17,7 @@ import { VERSION } from "../version.js";
 
 const INSTRUCTIONS = `Scout discovers and verifies MCP servers you can connect to right now.
 Call list_available_mcps to scan for connectable servers (localhost by default,
-or a host/CIDR/range), then connect to whichever one provides the tools you need.
+or a host/CIDR), then connect to whichever one provides the tools you need.
 Use probe_mcp to verify a single known URL.`;
 
 /** Build engine options from tool arguments (no rendering concerns here). */
@@ -71,12 +71,12 @@ export async function serveMcp(): Promise<void> {
       description:
         "Scan for connectable MCP servers and return each one's transport, " +
         "status (available / auth-required), and the tools it exposes. " +
-        "Scans localhost by default; pass a host, CIDR, or range to scan more.",
+        "Scans localhost by default; pass a host or CIDR to scan more.",
       inputSchema: {
         host: z
           .string()
           .optional()
-          .describe("IP, hostname, CIDR, range, or 'auto'. Default 127.0.0.1"),
+          .describe("IP, hostname, CIDR, or 'auto'. Default 127.0.0.1"),
         ports: z
           .string()
           .optional()
@@ -113,7 +113,7 @@ export async function serveMcp(): Promise<void> {
         host: z
           .string()
           .optional()
-          .describe("IP, hostname, CIDR, range, or 'auto'. Default 127.0.0.1"),
+          .describe("IP, hostname, CIDR, or 'auto'. Default 127.0.0.1"),
         ports: z
           .string()
           .optional()

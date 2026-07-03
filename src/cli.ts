@@ -182,7 +182,7 @@ Examples:
   // Targeting
   .option(
     "--host <spec>",
-    "host(s): IP, hostname, CIDR (192.168.1.0/24), range (.10-20), or auto",
+    "host(s): IP, hostname, CIDR (192.168.1.0/24), or auto (LAN)",
     "127.0.0.1",
   )
   .option("--ports <spec>", "ports, e.g. 3000,8080 or 1-1024")
