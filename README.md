@@ -1,7 +1,8 @@
 # scout
 
-**A live scanner for local services you can connect to — `nmap` for
-[MCP](https://modelcontextprotocol.io) servers *and* local AI APIs.**
+**`nmap` for [MCP](https://modelcontextprotocol.io)/AI services: an agent-friendly CLI (and MCP server itself)
+that dynamically scans your machine and LAN for connectable MCP servers and local LLM/AI APIs, so agents can
+discover, verify, and invoke local AI tools on the fly.**
 
 Scout doesn't just read config files to see what's *declared* — it actively scans
 for listening services, verifies each one (the real MCP `initialize` handshake, or
