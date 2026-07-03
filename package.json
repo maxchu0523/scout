@@ -1,6 +1,6 @@
 {
   "name": "scout-ai",
-  "version": "0.3.1-beta.0",
+  "version": "0.3.2-beta.0",
   "description": "Scout — a live scanner for connectable MCP servers and local AI APIs (LM Studio, Ollama). Discovers, verifies, and invokes them; like nmap for MCP.",
   "type": "module",
   "private": false,
