@@ -39,42 +39,14 @@ Anything else — an open port that isn't MCP, a declared server that doesn't
 answer — is simply **not reported**. The output is "what can I connect to," not a
 diagnostic of broken configs.
 
-## How discovery works
-
-MCP has multiple transports, and they're discovered differently:
-
-| Transport | Listens on a port? | How Scout finds it |
-|---|---|---|
-| **Streamable HTTP** / legacy HTTP+SSE | yes | **port scan** + endpoint probe + handshake |
-| **stdio** (local subprocess) | no | read client **configs** for the command, then spawn + handshake |
-
-So the port sweep is the hero feature for HTTP servers; stdio servers are found
-via config files (Claude Desktop, Claude Code, Cursor, VS Code, …) and verified
-by spawning them.
-
-### LAN scanning
-
-`--host` accepts more than a single address — Scout can sweep an entire subnet
-for HTTP/SSE MCP servers:
-
-```bash
-scout scan --host 192.168.1.0/24       # a CIDR block
-scout scan --host auto                  # this machine's local subnet(s)
-```
-
-Multi-host scans use CIDR notation (`192.168.1.0/24`) or `auto`. Every
-(host, port) pair is swept in one saturated concurrency pool, then each open
-endpoint gets the real MCP handshake. A CIDR block is capped (65 536 hosts) and
-Scout prints a heads-up before scanning more than 256 hosts. stdio discovery is
-inherently local, so it applies only when localhost is in range.
-
 ## Install
 
 ```bash
-npm install
-npm run build
-npm link        # optional: makes `scout` available globally
+npm install -g scout-ai     # then: scout
+npx scout-ai                # or run without installing
 ```
+
+To build from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Usage
 
@@ -93,12 +65,26 @@ scout call http://127.0.0.1:9000/mcp generate_image \
 scout chat http://127.0.0.1:1234 "summarize this in 3 bullets: ..."  # talk to LM Studio/Ollama
 ```
 
-## Find *and use* a service (for agents)
+## ⚠️ Safety — you decide what's safe to run
 
-Scout doesn't just discover — it can invoke, so an agent can go from
-"I don't have that capability" to "I found a local service and used it":
+Scout tells you what's **reachable**, not what's **trustworthy**. It does not vet,
+sandbox, or rank the safety of anything it finds, and it never invokes a tool on
+its own — discovery and invocation are always separate, explicit steps.
 
-**discover → use.**
+- A discovered service was found by an **active scan** — it is **not** pre-approved
+  or endorsed. Treat every hit as an unauthorized third party.
+- Tool/model **names, descriptions, and annotations** (`readOnlyHint`,
+  `destructiveHint`, …) are **self-reported by the server** and can be wrong or
+  deliberately misleading. They're hints, never a safety guarantee.
+- Treat any tool's **output** as untrusted data, not as instructions to follow.
+
+Before running `scout call` / `scout chat` against a service, **you (or your agent)
+must decide** whether to trust it. Scout deliberately leaves that judgment to you.
+
+## For agents
+
+Scout doesn't just discover — it can invoke, so an agent can go from "I don't have
+that capability" to "I found a local service and used it":
 
 - **Discover** — `scout scan --json` lists `services` (MCP tools with their
   `inputSchema`/`annotations`, and AI APIs with their `models`).
@@ -106,14 +92,11 @@ Scout doesn't just discover — it can invoke, so an agent can go from
 - **Talk to a local model** — `scout chat <url> [--model <id>] "<prompt>"`
   (OpenAI-compatible; works with LM Studio and Ollama; auto-picks a model).
 
-### The CLI is self-documenting (no skill required)
+`scout --help` embeds the whole agent workflow, the JSON shape, examples, and the
+trust rules — so **any agent that can run a command can learn and use Scout with
+zero setup**, no docs required.
 
-`scout --help` embeds the whole agent workflow, the JSON output shape, examples,
-and the trust rules — so **any agent that can run a command can learn and use
-Scout with zero setup**, just like a person reading `man`. (Verified: a fresh
-agent given only `--help` discovered a local model and used it, end to end.)
-
-### Optional: the suggested skill/prompt
+### Suggested skill/prompt
 
 The CLI teaches itself, so a skill isn't needed to *use* Scout — its only job is to
 tell an agent that Scout **exists** and when to reach for it.
@@ -122,17 +105,11 @@ at `scout --help` (so it never drifts). Use it as a Claude Code skill
 (`~/.claude/skills/scout/SKILL.md`, auto-triggers), a Cursor rule, an `AGENTS.md`
 entry (Codex and others), or a line in your system prompt.
 
-### Use Scout as an MCP server (discovery for agents)
+### Scout as an MCP server
 
-`scout serve` runs Scout *as an MCP server*, so an agent can discover other
-services through the protocol it already speaks — no shell-out. It exposes:
-
-- **`list_available_mcps`** — connectable MCP servers (args: `host`, `ports`,
-  `includeConfig`, `timeoutMs`).
-- **`list_ai_services`** — local AI APIs (LM Studio, Ollama, …) and their models.
-- **`probe_mcp`** — verify one explicit URL.
-
-Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
+`scout serve` runs Scout *as an MCP server*, so an agent can discover other services
+through the protocol it already speaks — no shell-out. It exposes
+`list_available_mcps`, `list_ai_services`, and `probe_mcp`. Add it as a stdio server:
 
 ```json
 {
@@ -142,7 +119,7 @@ Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
 }
 ```
 
-### Key options
+## Options
 
 | Flag | Default | Purpose |
 |---|---|---|
@@ -163,20 +140,7 @@ Add it to a client like Claude Code / Claude Desktop / Cursor as a stdio server:
 
 Run `scout scan --help` for the full list.
 
-## Design
-
-One scan **engine** produces a single canonical result object. Two renderers
-consume it:
-
-- **Agent path** (`--json` / non-TTY): prints the canonical object verbatim. The
-  React/Ink UI is **lazy-imported**, so this path never loads it.
-- **Human path** (TTY): a React **Ink** UI with a live "Scouting" animation and
-  results tables (MCP servers + AI services) that stream in as each is verified.
-
-Presentation flags (`--tools`, `--status`, `--sort`) only affect the human UI;
-`--json` is always the full canonical object.
-
-### JSON shape
+## Sample output (`--json`)
 
 Every entry in `services` is discriminated by `kind` (`mcp` | `llm-api`):
 
@@ -220,39 +184,11 @@ Every entry in `services` is discriminated by `kind` (`mcp` | `llm-api`):
 }
 ```
 
-### Cost of the Ink UI (measured)
+## Contributing
 
-| | Agent path (`--json`) | Human path (Ink) |
-|---|---|---|
-| Cold start | ~0.10 s | ~0.20 s (+~100 ms to load React/Ink) |
-| Deps loaded | MCP SDK only | + ink (696K) + react (368K) + yoga (296K) ≈ 1.4 MB |
-| Bundled output | `cli.js` 5 KB + shared 13 KB | + lazy `ink-*.js` chunk 7 KB |
-| Scan speed | identical — network-I/O bound, not render |
-
-Because the Ink renderer is lazy-loaded, agents using `--json` pay none of its cost.
-
-## Development
-
-```bash
-npm run dev -- scan --ports 3001   # run from source via tsx
-npm run typecheck
-npm run build                      # tsup → dist/ (code-split, lazy Ink chunk)
-
-npm run lint                       # Biome lint + format check
-npm run lint:fix                   # auto-fix lint/format
-npm test                           # node:test unit tests (via tsx)
-npm run check                      # lint + typecheck + test (CI gate)
-```
-
-### Linting & tests
-
-- **Lint/format:** [Biome](https://biomejs.dev) (`biome.json`) — one fast tool for both.
-- **Tests:** Node's built-in `node:test` run through `tsx`, covering the pure logic
-  (port parsing, concurrency pool, endpoint building, config parsing) in `test/`.
-- **Pre-commit gate:** `githooks/pre-commit` lints **only the staged files**
-  (`biome check --staged`) and runs the test suite, blocking the commit on failure.
-  It's activated automatically on `npm install` via the `prepare` script
-  (`git config core.hooksPath githooks`) — no Husky/lint-staged dependency.
+How discovery works (transports, LAN scanning), the engine/renderer design,
+build-from-source setup, dev commands, and tests are documented in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
