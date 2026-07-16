@@ -17,3 +17,15 @@ export const DEFAULT_PORT_CONCURRENCY = 200;
 
 /** Parallelism of the (heavier) handshake/fingerprint probes. */
 export const DEFAULT_PROBE_CONCURRENCY = 20;
+
+/** Max models per service to fetch per-model detail for (Ollama /api/show). */
+export const DEFAULT_MODEL_DETAIL_LIMIT = 8;
+
+/** Seconds between sweeps for `scout watch`. */
+export const DEFAULT_WATCH_INTERVAL_S = 60;
+
+/** Minimum allowed `scout watch --interval` (guards against a hot loop). */
+export const MIN_WATCH_INTERVAL_S = 5;
+
+/** Preferred port for the `scout ui` dashboard (falls back to ephemeral). */
+export const DEFAULT_UI_PORT = 7777;

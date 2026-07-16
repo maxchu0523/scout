@@ -11,6 +11,45 @@ value on the existing `source` field. Nothing else.
 
 ---
 
+## What Phase 1 already built (read before starting)
+
+Phase 1 is merged. The following facts change how you implement Phase 2 —
+they supersede the original assumptions in the task bodies below:
+
+- **Shared targeting flags exist.** `addTargetingOptions(cmd: Command)` and the
+  `CliTargetingOpts` interface are in [src/cli.ts](../../src/cli.ts). New
+  engine-driven commands (`watch`, `diff`) call `addTargetingOptions(...)` and
+  type their action arg as `CliTargetingOpts & { …command-specific… }`, then
+  build options via the existing `buildScanOptions(o)`. Do NOT re-list scan
+  flags by hand. Note `buildScanOptions` now also sets `includeOpenApi`.
+- **`originKey` lives in `scan.ts`, not yet extracted.** Phase 1 split it into
+  two module-private helpers in [src/scan.ts](../../src/scan.ts): `originKey(s)`
+  (adds the `mcp:stdio:<label>` special case) and `urlHost(s)` (host:port, or
+  the raw url for stdio). Task 2.1's "move `originKey` into
+  `src/util/originKey.ts`" is still correct — but you are extracting BOTH
+  helpers, and they currently take a full `Service`. Generalize the signature
+  to accept `{ kind, url, transport? }` so registry entries (which are not
+  `Service`s) can share it, then re-import both into `scan.ts`. Keep behavior
+  identical (the Phase 1 tests in `test/openApiProbe.test.ts` exercise the
+  dedup path — they must stay green).
+- **Shared HTTP probe helpers exist.** [src/probe/http.ts](../../src/probe/http.ts)
+  exports `getJson`, `postJson`, `baseUrlFor`, and the `HttpProbeResponse`
+  type. `--verify` in `scout list` and any re-probing in `watch` should reuse
+  `probeCandidate` / `probeAiService` (which now use these helpers), not
+  hand-rolled fetches.
+- **New service kinds.** `Service` is now `ServerResult | AiServiceResult |
+  OpenApiServiceResult`, and `AiApi` includes `"comfyui"`. `diffScans`
+  (Task 2.4) and the registry must handle all three `kind`s. Registry entries
+  only need to persist `mcp` and `llm-api` (openapi services are opt-in and
+  transient — do not store them); `diff` however compares whatever is in the
+  two `ScanResult`s, so its `changed`-detection must not assume a kind.
+- **`ScanOptions` gained `includeOpenApi: boolean`** (required field). Every
+  place that constructs `ScanOptions` sets it — the registry-driven scans in
+  Tasks 2.3/2.5 must set it too (default `false` unless the command exposes
+  `--openapi`, which it gets for free via `addTargetingOptions`).
+
+---
+
 ## Task 2.1 — Registry store module
 
 ### Storage design
@@ -29,6 +68,7 @@ value on the existing `source` field. Nothing else.
       "name": "image-tools",
       "url": "http://127.0.0.1:9000/mcp",  // or the stdio command label
       "transport": "streamable-http",       // mcp only: "streamable-http" | "sse" | "stdio"
+      "api": "ollama",                       // llm-api only: "openai-compatible"|"ollama"|"comfyui"
       "stdio": { "command": "npx", "args": ["-y", "some-mcp"] }, // stdio only
       "addedAt": "2026-07-05T10:00:00.000Z",
       "addedBy": "manual",                  // "manual" | "scan"
@@ -169,8 +209,10 @@ interface ScanDiff {
 ```
 
 `changed` triggers: `status` differs; for `mcp`, the set of tool names
-differs; for `llm-api`, the set of models differs. `fields` names what changed
-(`"status"`, `"tools"`, `"models"`).
+differs; for `llm-api`, the set of models differs; for `openapi`,
+`operationCount` differs. `fields` names what changed (`"status"`, `"tools"`,
+`"models"`, `"operations"`). A pair whose `kind` changed between scans counts
+as `removed` + `added`, not `changed`.
 
 ### CLI
 

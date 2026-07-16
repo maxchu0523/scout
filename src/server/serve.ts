@@ -35,6 +35,13 @@ function scanOptionsFrom(args: {
     paths: DEFAULT_PATHS,
     includeConfig: args.includeConfig !== false,
     includeAi: true,
+    // The serve tools filter to kind mcp / llm-api, so openapi results would
+    // never be returned; keep the extra probing off.
+    includeOpenApi: false,
+    // Agents using `scout serve` should see manually-registered servers, but a
+    // read-only discovery call must never mutate the registry — no --record.
+    includeManual: true,
+    record: false,
     extraConfigPaths: [],
     connectTimeoutMs: DEFAULT_CONNECT_TIMEOUT_MS,
     timeoutMs: args.timeoutMs ?? DEFAULT_TIMEOUT_MS,

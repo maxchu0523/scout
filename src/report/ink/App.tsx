@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { runScan } from "../../scan.js";
 import type {
   AiServiceResult,
+  OpenApiServiceResult,
   ScanOptions,
   ScanResult,
   ServerResult,
@@ -10,6 +11,7 @@ import type {
   Status,
 } from "../../types.js";
 import { AiHeaderRow, AiRow } from "./AiRow.js";
+import { OpenApiHeaderRow, OpenApiRow } from "./OpenApiRow.js";
 import { Scouting } from "./Scouting.js";
 import { HeaderRow, ServerRow } from "./ServerRow.js";
 
@@ -91,6 +93,10 @@ export function App({
     all.filter((s): s is AiServiceResult => s.kind === "llm-api"),
     display,
   );
+  const openapi = sortServices(
+    all.filter((s): s is OpenApiServiceResult => s.kind === "openapi"),
+    display,
+  );
 
   return (
     <Box flexDirection="column" paddingY={1}>
@@ -135,7 +141,17 @@ export function App({
         </Box>
       )}
 
-      {done && mcp.length === 0 && ai.length === 0 && (
+      {openapi.length > 0 && (
+        <Box marginTop={1} flexDirection="column">
+          <Text bold>HTTP APIs (OpenAPI)</Text>
+          <OpenApiHeaderRow />
+          {openapi.map((s) => (
+            <OpenApiRow key={s.url} service={s} showOps={display.showTools} />
+          ))}
+        </Box>
+      )}
+
+      {done && mcp.length === 0 && ai.length === 0 && openapi.length === 0 && (
         <Box marginTop={1}>
           <Text color="gray">No connectable services found.</Text>
         </Box>
@@ -144,8 +160,9 @@ export function App({
       {done && result && (
         <Box marginTop={1}>
           <Text color="gray">
-            {mcp.length} MCP · {ai.length} AI · {result.scanned.openPorts} open
-            across {result.scanned.hosts} host
+            {mcp.length} MCP · {ai.length} AI ·{" "}
+            {openapi.length > 0 ? `${openapi.length} API · ` : ""}
+            {result.scanned.openPorts} open across {result.scanned.hosts} host
             {result.scanned.hosts === 1 ? "" : "s"}
           </Text>
         </Box>

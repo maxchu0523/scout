@@ -1,5 +1,26 @@
 # Phase 3 — `scout ui` web dashboard & `scout expose` stdio bridge
 
+> **Status: SHIPPED.** All three tasks implemented and verified end-to-end
+> (`npm run check` green, 109 tests). What landed:
+> - **Shared `resolveScanOptions`** ([src/util/scanOptions.ts](../../src/util/scanOptions.ts)) —
+>   the CLI's `buildScanOptions` and the UI server both build `ScanOptions`
+>   through it. CLI keeps its `--full`/large-range warnings as a thin wrapper.
+> - **Task 3.1** — [src/server/ui.ts](../../src/server/ui.ts) + `scout ui`
+>   (node:http only; `/api/version`, `/api/registry`, SSE `/api/scan` with a
+>   single-scan 409 lock + 15s keep-alive, static serving with traversal guard
+>   and a 503 when unbuilt). Tests in [test/uiServer.test.ts](../../test/uiServer.test.ts).
+> - **Task 3.2** — React dashboard in [ui/](../../ui/) (Vite, builds to
+>   `dist/ui`, types via `@scout/types` alias, ~5 components, dark CSS). Root
+>   `build` = `tsup && npm --prefix ui run build`; `prepack` runs
+>   `npm ci --prefix ui` first.
+> - **Task 3.3** — [src/server/expose.ts](../../src/server/expose.ts) +
+>   `scout expose` (stdio→streamable-HTTP proxy, bearer auth on by default
+>   emitting the strict 401+WWW-Authenticate signal, registry upsert). Tests in
+>   [test/expose.test.ts](../../test/expose.test.ts).
+>
+> Deviations & follow-ups discovered during implementation are captured in
+> [future-improvements.md](future-improvements.md) (see "Tech debt from Phase 3").
+
 Two large, independent tracks. Depends on Phase 2 (the UI shows registry and
 watch data; `expose` registers into the registry).
 
@@ -9,6 +30,49 @@ static files at package build time, served by a tiny lazily-imported local
 HTTP server. Rationale: the UI is a third renderer of the same `ScanResult`
 contract and must version in lockstep with the schema. See invariant 3 in
 [README.md](README.md) — no React on the CLI hot path.
+
+---
+
+## What Phase 2 already built (read before starting)
+
+Phase 2 is merged. These supersede assumptions in the task bodies below:
+
+- **Registry store & home dir.** [src/registry/store.ts](../../src/registry/store.ts)
+  exports `loadRegistry()`, `saveRegistry()`, `upsertEntry()`, `scoutHome()`
+  (honors `SCOUT_HOME`), and `registryPath()`. Registry types are in
+  [src/registry/types.ts](../../src/registry/types.ts) (`Registry`,
+  `RegistryEntry`, `RegistryStatus = Status | "unreachable"`). Task 3.1's
+  `GET /api/registry` returns exactly what `loadRegistry()` yields (already the
+  `{ version, entries }` shape). Task 3.3's `expose` upsert uses
+  `upsertEntry` + `saveRegistry`, and can build its entry with
+  `entryFromService` from [src/registry/commands.ts](../../src/registry/commands.ts).
+- **originKey is already extracted** to [src/util/originKey.ts](../../src/util/originKey.ts)
+  (`originKey`, `urlHost`, accepting `{ kind, url, transport? }`). The UI's
+  host-grouping (`new URL(service.url).hostname`) and the registry-ghost
+  matching should reuse `urlHost`/`originKey`, not re-derive keys.
+- **diff/watch primitives exist.** [src/registry/diff.ts](../../src/registry/diff.ts)
+  (`diffScans`, `ScanDiff`, `formatDiff`, `isEmptyDiff`) and
+  [src/registry/watch.ts](../../src/registry/watch.ts) (`watchOnce`,
+  `diffToEvents`, `WatchEvent`). If the UI grows a live "changed since last
+  sweep" view, drive it from `diffScans`/`watchOnce` rather than re-implementing.
+- **`buildScanOptions` is still CLI-local** in [src/cli.ts](../../src/cli.ts)
+  and NOT yet extracted. Task 3.1 still needs to factor its pure parts into
+  `src/util/scanOptions.ts` (shared by the CLI and the UI server) as written —
+  remember it must now populate ALL `ScanOptions` fields, including the Phase 1
+  `includeOpenApi` and the Phase 2 `includeManual` + `record`. The UI server
+  should default `record: false` and `includeManual: true`.
+- **`ScanOptions` shape today** (all required): `hosts, target, ports, paths,
+  includeConfig, includeAi, includeOpenApi, includeManual, record,
+  extraConfigPaths, connectTimeoutMs, timeoutMs, portConcurrency,
+  probeConcurrency, transport`. Any new `ScanOptions` builder must set every one.
+- **`SCOUT_HOME` is the test isolation seam.** Every Phase 3 test that touches
+  the registry or `last-scan.json` (`uiServer.test.ts`, `expose.test.ts`) must
+  set `SCOUT_HOME` to a `mkdtemp` dir, and any spawned child process must pass
+  it through `env` (see how `test/serve.test.ts` does this).
+- **`scout serve` already runs scans with `includeManual: true`, `record:
+  false`.** Mirror that stance for the UI server and expose: read the registry,
+  never silently mutate it except where the feature explicitly says so
+  (`expose` upserts its own entry; the UI is read-only w.r.t. the registry).
 
 ---
 

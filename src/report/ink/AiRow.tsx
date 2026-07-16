@@ -11,11 +11,12 @@ const STATUS = {
   "auth-required": { icon: "🔒", color: "yellow" as const },
 };
 
-const COLS = { name: 22, api: 8, target: 30, models: 6 };
+const COLS = { name: 22, api: 8, target: 30, models: 13 };
 
 const API_LABEL: Record<string, string> = {
   "openai-compatible": "openai",
   ollama: "ollama",
+  comfyui: "comfyui",
 };
 
 function line(name: string, api: string, target: string, models: string) {
@@ -44,8 +45,12 @@ export function AiRow({
   const s = STATUS[service.status];
   const latency =
     service.status === "auth-required" ? "—" : `${service.latencyMs}ms`;
+  const loaded =
+    service.modelInfo?.filter((m) => m.state === "loaded").length ?? 0;
   const models =
-    service.status === "auth-required" ? "—" : String(service.models.length);
+    service.status === "auth-required"
+      ? "—"
+      : `${service.models.length}${loaded > 0 ? ` (${loaded} loaded)` : ""}`;
 
   return (
     <Box flexDirection="column">

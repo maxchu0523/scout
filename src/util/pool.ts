@@ -68,6 +68,7 @@ export const DEFAULT_PORTS: number[] = [
   8008,
   8080,
   8081,
+  8188, // ComfyUI
   8443,
   8787, // wrangler / common MCP worker default
   8888,

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -14,12 +17,15 @@ function textOf(res: unknown): string {
 
 describe("scout serve (MCP server)", { timeout: 30000 }, () => {
   before(async () => {
+    // Isolate the registry so the scan the server runs can't touch ~/.scout.
+    const home = await mkdtemp(path.join(tmpdir(), "scout-serve-"));
     client = new Client({ name: "scout-test", version: "0.0.0" });
     await client.connect(
       new StdioClientTransport({
         command: process.execPath,
         args: ["--import", "tsx", "src/cli.ts", "serve"],
         stderr: "ignore",
+        env: { ...process.env, SCOUT_HOME: home },
       }),
     );
   });

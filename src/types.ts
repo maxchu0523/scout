@@ -7,7 +7,7 @@
  */
 
 /** How Scout learned about a candidate server. */
-export type Source = "port-scan" | "config";
+export type Source = "port-scan" | "config" | "manual";
 
 /** MCP transport a server speaks. */
 export type Transport = "streamable-http" | "sse" | "stdio";
@@ -55,10 +55,26 @@ export interface ServerCapabilities {
 }
 
 /** What kind of service a discovered entry is. */
-export type ServiceKind = "mcp" | "llm-api";
+export type ServiceKind = "mcp" | "llm-api" | "openapi";
 
 /** Which local AI API a service speaks. */
-export type AiApi = "openai-compatible" | "ollama";
+export type AiApi = "openai-compatible" | "ollama" | "comfyui";
+
+/** Per-model detail, populated when the API self-describes it. */
+export interface ModelInfo {
+  id: string;
+  /** Model family/architecture, e.g. "llama", "qwen2". */
+  family?: string;
+  /** e.g. "7.6B" — kept as the string the API returned. */
+  parameterSize?: string;
+  /** e.g. "Q4_K_M". */
+  quantization?: string;
+  contextLength?: number;
+  /** LM Studio reports load state. */
+  state?: "loaded" | "not-loaded";
+  /** e.g. "llm" | "embeddings" | "vlm" (LM Studio). */
+  type?: string;
+}
 
 /** One connectable MCP server (the `mcp` variant of a service). */
 export interface ServerResult {
@@ -90,15 +106,44 @@ export interface AiServiceResult {
   latencyMs: number;
   /** Model ids/names, fully enumerated. */
   models: string[];
+  /** Optional per-model detail (Ollama /api/show, LM Studio /api/v0/models). */
+  modelInfo?: ModelInfo[];
   /** Server response header, if any. */
   server?: string;
+  /** Service version when the API self-reports it (e.g. ComfyUI). */
+  version?: string;
   source: Source;
   /** Human-readable label, e.g. "Ollama" / "OpenAI-compatible API". */
   name: string;
 }
 
+/**
+ * One HTTP service that self-describes via an OpenAPI document.
+ * Only emitted when the scan opts in via `includeOpenApi` (--openapi).
+ */
+export interface OpenApiServiceResult {
+  kind: "openapi";
+  /** Base URL, e.g. http://192.168.1.20:8080 */
+  url: string;
+  /** Where the document was found, e.g. "/openapi.json". */
+  specPath: string;
+  status: Status;
+  latencyMs: number;
+  /** info.title from the document. */
+  name: string;
+  /** info.description, truncated to 500 chars. */
+  description?: string;
+  /** info.version. */
+  version?: string;
+  /** Count of path+method operations in the document. */
+  operationCount: number;
+  /** Up to 20 operations: "GET /v1/things — summary". */
+  operations: string[];
+  source: Source;
+}
+
 /** A discovered service — discriminated by `kind`. */
-export type Service = ServerResult | AiServiceResult;
+export type Service = ServerResult | AiServiceResult | OpenApiServiceResult;
 
 /** The single canonical object the engine resolves to and `--json` prints. */
 export interface ScanResult {
@@ -145,6 +190,12 @@ export interface ScanOptions {
   includeConfig: boolean;
   /** Also fingerprint local AI API services on open ports. */
   includeAi: boolean;
+  /** Also report services exposing an OpenAPI document (opt-in). */
+  includeOpenApi: boolean;
+  /** Also probe services remembered in the local registry (default true). */
+  includeManual: boolean;
+  /** Persist every verified service to the registry (addedBy "scan"). */
+  record: boolean;
   extraConfigPaths: string[];
   connectTimeoutMs: number;
   timeoutMs: number;

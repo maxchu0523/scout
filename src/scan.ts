@@ -3,6 +3,7 @@ import { buildEndpointCandidates } from "./discovery/endpoints.js";
 import { type HostPort, scanHostPorts } from "./discovery/portScan.js";
 import { probeAiService } from "./probe/aiProbe.js";
 import { probeCandidate } from "./probe/mcpProbe.js";
+import { probeOpenApi } from "./probe/openApiProbe.js";
 import type {
   Candidate,
   ScanEvent,
@@ -10,17 +11,8 @@ import type {
   ScanResult,
   Service,
 } from "./types.js";
+import { originKey, urlHost } from "./util/originKey.js";
 import { mapPool } from "./util/pool.js";
-
-/** Origin key used to collapse the same service reached via multiple paths. */
-function originKey(s: Service): string {
-  if (s.kind === "mcp" && s.transport === "stdio") return `mcp:stdio:${s.url}`;
-  try {
-    return `${s.kind}:${new URL(s.url).host}`;
-  } catch {
-    return `${s.kind}:${s.url}`;
-  }
-}
 
 /** Prefer an available result over auth-required; otherwise lower latency. */
 function better(a: Service, b: Service): Service {
@@ -74,6 +66,17 @@ export async function runScan(
       ...(await discoverFromConfig(opts.extraConfigPaths, opts.includeConfig)),
     );
   }
+  // Manual registry entries join the scan as candidates / extra AI targets.
+  // Lazy import keeps the registry store off the hot path when disabled.
+  let manualAiTargets: { host: string; port: number }[] = [];
+  let probedIds = new Set<string>();
+  if (opts.includeManual) {
+    const { manualWork } = await import("./registry/sync.js");
+    const work = await manualWork();
+    candidates.push(...work.candidates);
+    manualAiTargets = work.aiTargets;
+    probedIds = work.probedIds;
+  }
   candidates.forEach((candidate, i) => {
     onEvent({ type: "candidate", candidate, total: i + 1 });
   });
@@ -109,12 +112,38 @@ export async function runScan(
         ),
       )
     : Promise.resolve([]);
-  await Promise.all([mcpWork, aiWork]);
+  const openApiWork = opts.includeOpenApi
+    ? mapPool(openPairs, opts.probeConcurrency, async (hp) =>
+        record(
+          await probeOpenApi(hp.host, hp.port, { timeoutMs: opts.timeoutMs }),
+        ),
+      )
+    : Promise.resolve([]);
+  // Manual llm-api entries may point at hosts the port sweep never touched.
+  // probeAiService stamps source "port-scan"; re-stamp as "manual" since these
+  // targets came from the registry, not the sweep.
+  const manualAiWork = mapPool(
+    manualAiTargets,
+    opts.probeConcurrency,
+    async (hp) => {
+      const svc = await probeAiService(hp.host, hp.port, {
+        timeoutMs: opts.timeoutMs,
+      });
+      if (svc) svc.source = "manual";
+      record(svc);
+    },
+  );
+  await Promise.all([mcpWork, aiWork, openApiWork, manualAiWork]);
 
   // 4. Assemble canonical result --------------------------------------------
-  const services = [...byOrigin.values()].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  // An OpenAPI match is the weakest identification: when the same origin was
+  // verified as MCP or an AI API (e.g. vLLM serves both /v1/models and
+  // /openapi.json), the stronger result wins and the openapi row is dropped.
+  const all = [...byOrigin.values()];
+  const claimed = new Set(all.filter((s) => s.kind !== "openapi").map(urlHost));
+  const services = all
+    .filter((s) => s.kind !== "openapi" || !claimed.has(urlHost(s)))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const result: ScanResult = {
     scannedAt: new Date().toISOString(),
     target: opts.target,
@@ -126,6 +155,17 @@ export async function runScan(
     },
     services,
   };
+
+  // 5. Reconcile with the registry (best-effort, never fatal to the scan) -----
+  if (opts.includeManual || opts.record) {
+    const { syncScanToRegistry } = await import("./registry/sync.js");
+    await syncScanToRegistry(
+      result,
+      { record: opts.record, probedIds },
+      result.scannedAt,
+    );
+  }
+
   onEvent({ type: "done", result });
   return result;
 }
